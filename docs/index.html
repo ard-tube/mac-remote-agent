@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MacRemote — Control Any Apple Silicon Mac from Android</title>
+  <meta name="description" content="Universal remote control for all Apple Silicon M-Series Macs (M1/M2/M3/M4). Control macOS, take Retina screenshots, manage Finder, sync Google Drive, and run Antigravity AI from your Android phone.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Ambient Gradient Glow Background -->
+  <div class="ambient-glow glow-top"></div>
+  <div class="ambient-glow glow-middle"></div>
+  <div class="ambient-glow glow-bottom"></div>
+
+  <!-- Navigation Bar -->
+  <header class="navbar">
+    <div class="nav-container">
+      <a href="#" class="brand">
+        <span class="brand-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+            <line x1="8" y1="21" x2="16" y2="21"></line>
+            <line x1="12" y1="17" x2="12" y2="21"></line>
+          </svg>
+        </span>
+        <span class="brand-name">MacRemote</span>
+        <span class="brand-badge">Apple Silicon</span>
+      </a>
+      <nav class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#simulator">Live Demo</a>
+        <a href="#compatibility">M-Series Support</a>
+        <a href="#architecture">Architecture</a>
+        <a href="#setup">Setup</a>
+      </nav>
+      <div class="nav-actions">
+        <a href="https://github.com/ard-tube/mac-remote-agent" target="_blank" class="btn btn-github">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+          </svg>
+          <span>Star on GitHub</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="hero-container">
+      <div class="badge-pill">
+        <span class="badge-dot"></span>
+        <span>Universal M-Series Edition • M1, M2, M3, M4 Macs</span>
+      </div>
+      <h1 class="hero-title">
+        Control Any <span class="gradient-text">Apple Silicon Mac</span><br>
+        Directly From Your Android Phone.
+      </h1>
+      <p class="hero-subtitle">
+        Leave your MacBook plugged in at home with the lid closed. Send natural commands or tap instant buttons on your Android phone to stream Retina screenshots, browse Finder, sync Google Drive, and harness Google Antigravity AI anywhere.
+      </p>
+
+      <div class="install-bar">
+        <span class="install-prefix">$</span>
+        <code id="installCommand">git clone https://github.com/ard-tube/mac-remote-agent.git ~/mac-remote-agent &amp;&amp; cd ~/mac-remote-agent &amp;&amp; ./setup.sh</code>
+        <button class="btn-copy" onclick="copyInstallCmd()" title="Copy command">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+          <span id="copyFeedback">Copy</span>
+        </button>
+      </div>
+
+      <div class="hero-badges">
+        <div class="chip-badge"><span>⚡</span> M1 / M2 / M3 / M4</div>
+        <div class="chip-badge"><span>🔒</span> E2E PIN Paired</div>
+        <div class="chip-badge"><span>🌐</span> Zero Port Forwarding</div>
+        <div class="chip-badge"><span>🔋</span> Clamshell Keep-Awake</div>
+        <div class="chip-badge"><span>🤖</span> Google Antigravity AI</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Interactive Simulator & Visual Preview -->
+  <section class="section" id="simulator">
+    <div class="section-container">
+      <div class="section-header">
+        <h2 class="section-title">Interactive Android Phone Simulator</h2>
+        <p class="section-desc">Experience how seamless it is. Click any button below on the Android phone to see real-time macOS responses.</p>
+      </div>
+
+      <div class="simulator-wrapper">
+        <!-- Phone Frame -->
+        <div class="phone-frame">
+          <div class="phone-speaker"></div>
+          <div class="phone-camera"></div>
+          <div class="phone-screen">
+            <!-- Telegram Header -->
+            <div class="chat-header">
+              <div class="chat-user">
+                <div class="chat-avatar">🍎</div>
+                <div class="chat-info">
+                  <div class="chat-name">My Mac Remote Bot <span class="verified">✓</span></div>
+                  <div class="chat-status">bot • online</div>
+                </div>
+              </div>
+              <div class="chat-mac-chip" id="chipIndicator">Apple M3</div>
+            </div>
+
+            <!-- Chat Messages Log -->
+            <div class="chat-messages" id="chatMessages">
+              <div class="chat-bubble bot">
+                <div class="bubble-text">
+                  🎉 <strong>Paired with Apple Silicon Mac!</strong><br>
+                  Ready for remote commands. Tap any shortcut below or type freely.
+                </div>
+                <span class="bubble-time">23:45</span>
+              </div>
+            </div>
+
+            <!-- Interactive Keyboard Buttons -->
+            <div class="chat-keyboard">
+              <div class="keyboard-row">
+                <button class="key-btn" onclick="simulateCommand('📸 Screenshot')">📸 Screenshot</button>
+                <button class="key-btn" onclick="simulateCommand('🔋 Status')">🔋 Status</button>
+              </div>
+              <div class="keyboard-row">
+                <button class="key-btn" onclick="simulateCommand('📂 Open Finder')">📂 Open Finder</button>
+                <button class="key-btn" onclick="simulateCommand('💾 Google Drive')">💾 Google Drive</button>
+              </div>
+              <div class="keyboard-row">
+                <button class="key-btn special" onclick="simulateCommand('🤖 Antigravity AI')">🤖 Antigravity AI</button>
+                <button class="key-btn" onclick="simulateCommand('🔒 Lock Screen')">🔒 Lock Screen</button>
+              </div>
+            </div>
+
+            <!-- Input Bar -->
+            <div class="chat-input-bar">
+              <input type="text" id="customInput" placeholder="Type a command or natural prompt..." onkeydown="if(event.key==='Enter') sendCustomCommand()">
+              <button class="send-btn" onclick="sendCustomCommand()">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="22" y1="2" x2="11" y2="13"></line>
+                  <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Phone Companion Sidecard -->
+        <div class="simulator-sidecard">
+          <div class="card-glass">
+            <h3>⚡ What Happens Behind the Scenes?</h3>
+            <ul class="steplist">
+              <li>
+                <div class="step-num">1</div>
+                <div>
+                  <strong>You tap or type from anywhere</strong>
+                  <p>Over cellular (5G/4G) or Wi-Fi. Message is sent instantly via Telegram's secure HTTPS cloud.</p>
+                </div>
+              </li>
+              <li>
+                <div class="step-num">2</div>
+                <div>
+                  <strong>MacBook receives via Long-Polling</strong>
+                  <p>Your Mac makes outbound HTTPS requests. No router firewall openings, static IPs, or VPNs required.</p>
+                </div>
+              </li>
+              <li>
+                <div class="step-num">3</div>
+                <div>
+                  <strong>Native macOS Engine Executes</strong>
+                  <p>Wakes frame buffer for crisp Retina screenshots, drives Finder via AppleScript, or delegates to Antigravity AI.</p>
+                </div>
+              </li>
+              <li>
+                <div class="step-num">4</div>
+                <div>
+                  <strong>Direct Delivery to Your Phone</strong>
+                  <p>Images, files, and AI results appear directly in your Telegram chat within seconds.</p>
+                </div>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Universal M-Series Compatibility Matrix -->
+  <section class="section" id="compatibility">
+    <div class="section-container">
+      <div class="section-header">
+        <h2 class="section-title">Engineered for All Apple Silicon M-Series</h2>
+        <p class="section-desc">Fully optimized across every generation of Apple Silicon hardware. Dynamically detects your model and processor architecture.</p>
+      </div>
+
+      <div class="matrix-grid">
+        <div class="matrix-card">
+          <div class="matrix-header">
+            <span class="m-chip m1">M1</span>
+            <div>
+              <h3>Apple M1 Series</h3>
+              <span class="chip-specs">M1 • M1 Pro • M1 Max • M1 Ultra</span>
+            </div>
+          </div>
+          <p class="matrix-desc">The trailblazer generation. Full power assertion and sleep control support.</p>
+          <div class="model-tags">
+            <span class="tag">MacBook Air 13"</span>
+            <span class="tag">MacBook Pro 13"/14"/16"</span>
+            <span class="tag">Mac mini</span>
+            <span class="tag">iMac 24"</span>
+            <span class="tag">Mac Studio</span>
+          </div>
+        </div>
+
+        <div class="matrix-card">
+          <div class="matrix-header">
+            <span class="m-chip m2">M2</span>
+            <div>
+              <h3>Apple M2 Series</h3>
+              <span class="chip-specs">M2 • M2 Pro • M2 Max • M2 Ultra</span>
+            </div>
+          </div>
+          <p class="matrix-desc">High-efficiency media engine. Instant JPEG screenshot hardware compression.</p>
+          <div class="model-tags">
+            <span class="tag">MacBook Air 13"/15"</span>
+            <span class="tag">MacBook Pro 14"/16"</span>
+            <span class="tag">Mac mini</span>
+            <span class="tag">Mac Studio</span>
+            <span class="tag">Mac Pro</span>
+          </div>
+        </div>
+
+        <div class="matrix-card featured">
+          <div class="matrix-badge">Hardware Accelerated</div>
+          <div class="matrix-header">
+            <span class="m-chip m3">M3</span>
+            <div>
+              <h3>Apple M3 Series</h3>
+              <span class="chip-specs">M3 • M3 Pro • M3 Max</span>
+            </div>
+          </div>
+          <p class="matrix-desc">Next-gen 3nm architecture. Instant Antigravity AI execution and dynamic sleep override.</p>
+          <div class="model-tags">
+            <span class="tag">MacBook Air 13"/15"</span>
+            <span class="tag">MacBook Pro 14"/16"</span>
+            <span class="tag">iMac 24"</span>
+          </div>
+        </div>
+
+        <div class="matrix-card">
+          <div class="matrix-header">
+            <span class="m-chip m4">M4</span>
+            <div>
+              <h3>Apple M4 Series</h3>
+              <span class="chip-specs">M4 • M4 Pro • M4 Max</span>
+            </div>
+          </div>
+          <p class="matrix-desc">Maximum neural performance for autonomous on-device Antigravity AI agent workloads.</p>
+          <div class="model-tags">
+            <span class="tag">MacBook Pro 14"/16"</span>
+            <span class="tag">Mac mini</span>
+            <span class="tag">iMac</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Architecture Flow Diagram -->
+  <section class="section" id="architecture">
+    <div class="section-container">
+      <div class="section-header">
+        <h2 class="section-title">System Architecture</h2>
+        <p class="section-desc">Zero open ports. Zero third-party cloud servers. Direct communication via Telegram's end-to-end encrypted protocol.</p>
+      </div>
+
+      <div class="architecture-diagram">
+        <svg class="arch-svg" viewBox="0 0 900 320" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- Flow Line 1 -->
+          <path d="M 190 160 L 330 160" stroke="#38bdf8" stroke-width="2.5" stroke-dasharray="6 6"/>
+          <!-- Flow Line 2 -->
+          <path d="M 470 160 L 610 160" stroke="#818cf8" stroke-width="2.5" stroke-dasharray="6 6"/>
+
+          <!-- Box 1: Android Phone -->
+          <g transform="translate(40, 70)">
+            <rect width="150" height="180" rx="16" fill="#18181b" stroke="#38bdf8" stroke-width="2"/>
+            <text x="75" y="40" fill="#38bdf8" font-size="28" text-anchor="middle">📱</text>
+            <text x="75" y="75" fill="#ffffff" font-family="'Plus Jakarta Sans', sans-serif" font-weight="700" font-size="16" text-anchor="middle">Android Phone</text>
+            <text x="75" y="100" fill="#a1a1aa" font-family="'Plus Jakarta Sans', sans-serif" font-size="12" text-anchor="middle">Telegram App</text>
+            <text x="75" y="125" fill="#a1a1aa" font-family="'Plus Jakarta Sans', sans-serif" font-size="11" text-anchor="middle">4G / 5G / Wi-Fi</text>
+            <rect x="25" y="140" width="100" height="24" rx="12" fill="#0284c7" fill-opacity="0.2"/>
+            <text x="75" y="156" fill="#38bdf8" font-family="'Plus Jakarta Sans', sans-serif" font-weight="600" font-size="11" text-anchor="middle">Mobile Client</text>
+          </g>
+
+          <!-- Box 2: Telegram Cloud -->
+          <g transform="translate(325, 70)">
+            <rect width="160" height="180" rx="16" fill="#18181b" stroke="#818cf8" stroke-width="2"/>
+            <text x="80" y="40" fill="#818cf8" font-size="28" text-anchor="middle">☁️</text>
+            <text x="80" y="75" fill="#ffffff" font-family="'Plus Jakarta Sans', sans-serif" font-weight="700" font-size="16" text-anchor="middle">Telegram Cloud</text>
+            <text x="80" y="100" fill="#a1a1aa" font-family="'Plus Jakarta Sans', sans-serif" font-size="12" text-anchor="middle">End-to-End HTTPS</text>
+            <text x="80" y="125" fill="#a1a1aa" font-family="'Plus Jakarta Sans', sans-serif" font-size="11" text-anchor="middle">Long Polling API</text>
+            <rect x="25" y="140" width="110" height="24" rx="12" fill="#6366f1" fill-opacity="0.2"/>
+            <text x="80" y="156" fill="#818cf8" font-family="'Plus Jakarta Sans', sans-serif" font-weight="600" font-size="11" text-anchor="middle">Zero Port Forward</text>
+          </g>
+
+          <!-- Box 3: Apple Silicon Mac -->
+          <g transform="translate(605, 50)">
+            <rect width="250" height="220" rx="16" fill="#18181b" stroke="#34d399" stroke-width="2"/>
+            <text x="125" y="35" fill="#34d399" font-size="28" text-anchor="middle">🍏</text>
+            <text x="125" y="65" fill="#ffffff" font-family="'Plus Jakarta Sans', sans-serif" font-weight="700" font-size="16" text-anchor="middle">Apple Silicon Mac</text>
+            <text x="125" y="85" fill="#a1a1aa" font-family="'Plus Jakarta Sans', sans-serif" font-size="12" text-anchor="middle">M1 / M2 / M3 / M4 (Plugged in)</text>
+            
+            <!-- Submodules inside Mac -->
+            <rect x="20" y="100" width="100" height="42" rx="8" fill="#27272a"/>
+            <text x="70" y="118" fill="#e4e4e7" font-size="11" font-weight="600" text-anchor="middle">📸 Screencapture</text>
+            <text x="70" y="132" fill="#a1a1aa" font-size="9" text-anchor="middle">Retina display</text>
+
+            <rect x="130" y="100" width="100" height="42" rx="8" fill="#27272a"/>
+            <text x="180" y="118" fill="#e4e4e7" font-size="11" font-weight="600" text-anchor="middle">📂 Finder Script</text>
+            <text x="180" y="132" fill="#a1a1aa" font-size="9" text-anchor="middle">AppleScript / Shell</text>
+
+            <rect x="20" y="150" width="100" height="42" rx="8" fill="#27272a"/>
+            <text x="70" y="168" fill="#e4e4e7" font-size="11" font-weight="600" text-anchor="middle">💾 Google Drive</text>
+            <text x="70" y="182" fill="#a1a1aa" font-size="9" text-anchor="middle">Local Auto-Sync</text>
+
+            <rect x="130" y="150" width="100" height="42" rx="8" fill="#27272a"/>
+            <text x="180" y="168" fill="#e4e4e7" font-size="11" font-weight="600" text-anchor="middle">🤖 Antigravity AI</text>
+            <text x="180" y="182" fill="#a1a1aa" font-size="9" text-anchor="middle">agy autonomous</text>
+
+            <rect x="20" y="200" width="210" height="14" rx="4" fill="#10b981" fill-opacity="0.15"/>
+            <text x="125" y="210" fill="#34d399" font-size="9" font-weight="600" text-anchor="middle">⚡ Clamshell Keep-Awake Active</text>
+          </g>
+        </svg>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features Grid -->
+  <section class="section" id="features">
+    <div class="section-container">
+      <div class="section-header">
+        <h2 class="section-title">Core Capabilities</h2>
+        <p class="section-desc">Everything you need to operate your Mac remotely with total peace of mind.</p>
+      </div>
+
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon icon-cyan">📸</div>
+          <h3>Retina Display Streaming</h3>
+          <p>Captures your Mac screen in full native Retina resolution, compresses it using hardware acceleration to ~700KB, and streams it back in 2 seconds.</p>
+          <div class="feature-cmd"><code>/ss</code> or <code>"take a screenshot"</code></div>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon icon-blue">📂</div>
+          <h3>Remote Finder &amp; File Manager</h3>
+          <p>Open Finder at any directory, list recent files, or reveal specific items. Browse your Mac from your phone as if you were sitting right in front of it.</p>
+          <div class="feature-cmd"><code>/finder ~/Downloads</code></div>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon icon-emerald">💾</div>
+          <h3>Google Drive Cloud Sync</h3>
+          <p>Copy any file or directory into your Mac's Google Drive sync folder. Google Drive immediately uploads it, making it ready on your Android phone in seconds.</p>
+          <div class="feature-cmd"><code>/drive report.pdf</code></div>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon icon-purple">🤖</div>
+          <h3>Google Antigravity AI Bridge</h3>
+          <p>Harness the full power of Antigravity AI on your Mac. Send complex programming, debugging, and file organization prompts straight to the Antigravity CLI.</p>
+          <div class="feature-cmd"><code>/agy organize desktop files</code></div>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon icon-amber">🔌</div>
+          <h3>Smart Clamshell Sleep Override</h3>
+          <p>Leave your MacBook plugged into power with the lid closed. MacRemote prevents idle and closed-lid sleep assertions so your Mac remains active 24/7.</p>
+          <div class="feature-cmd"><code>./clamshell-config.sh enable</code></div>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon icon-red">🔒</div>
+          <h3>PIN-Protected Security</h3>
+          <p>Secured with a 4-digit pairing PIN and strict Telegram User ID whitelisting. Strangers cannot message or command your Mac under any circumstance.</p>
+          <div class="feature-cmd"><code>/pair &lt;PIN&gt;</code></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Step-by-Step Setup Guide -->
+  <section class="section" id="setup">
+    <div class="section-container">
+      <div class="section-header">
+        <h2 class="section-title">Get Started in 3 Simple Steps</h2>
+        <p class="section-desc">No complicated network settings. You will be up and running in less than 3 minutes.</p>
+      </div>
+
+      <div class="setup-tabs">
+        <div class="tab-buttons">
+          <button class="tab-btn active" onclick="switchTab(0)">1. Create Telegram Bot</button>
+          <button class="tab-btn" onclick="switchTab(1)">2. Run Setup on Mac</button>
+          <button class="tab-btn" onclick="switchTab(2)">3. Pair from Phone</button>
+        </div>
+
+        <div class="tab-content" id="tabContent0">
+          <div class="setup-step">
+            <div class="step-badge">Step 1</div>
+            <h3>Create your free Telegram Bot</h3>
+            <p>1. Open the <strong>Telegram app</strong> on your Android phone.</p>
+            <p>2. Search for <code>@BotFather</code> and tap <strong>Start</strong>.</p>
+            <p>3. Send: <code class="inline-code">/newbot</code></p>
+            <p>4. Choose a display name (e.g. <em>My MacBook</em>) and a bot username (e.g. <em>my_mac_remote_bot</em>).</p>
+            <p>5. Copy the <strong>HTTP API Token</strong> provided (e.g. <code>792837492:AAF...</code>).</p>
+          </div>
+        </div>
+
+        <div class="tab-content hidden" id="tabContent1">
+          <div class="setup-step">
+            <div class="step-badge">Step 2</div>
+            <h3>Run the automated installer on your Mac</h3>
+            <p>Open Terminal on your Apple Silicon Mac and paste this 1-line command:</p>
+            <div class="code-box">
+              <code>git clone https://github.com/ard-tube/mac-remote-agent.git ~/mac-remote-agent &amp;&amp; cd ~/mac-remote-agent &amp;&amp; ./setup.sh</code>
+            </div>
+            <p>The interactive script will prompt for your token, configure sleep prevention on AC power, and set up the background 24/7 service.</p>
+          </div>
+        </div>
+
+        <div class="tab-content hidden" id="tabContent2">
+          <div class="setup-step">
+            <div class="step-badge">Step 3</div>
+            <h3>Pair your Android Phone</h3>
+            <p>1. Open your new bot on Telegram from your phone and tap <strong>Start</strong>.</p>
+            <p>2. Send the pairing command shown in your terminal:</p>
+            <div class="code-box">
+              <code>/pair 2551</code>
+            </div>
+            <p>3. You will immediately receive a success message with interactive buttons! You're ready to control your Mac from anywhere!</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer-container">
+      <div class="footer-left">
+        <span class="brand-name">MacRemote</span>
+        <p>Universal Remote Agent for Apple Silicon Macs &amp; Google Antigravity.</p>
+        <p class="copyright">Open source under MIT License • Created for the developer community.</p>
+      </div>
+      <div class="footer-right">
+        <a href="https://github.com/ard-tube/mac-remote-agent" target="_blank" class="footer-link">GitHub Repository</a>
+        <a href="https://github.com/ard-tube/mac-remote-agent/issues" target="_blank" class="footer-link">Report Issue</a>
+        <a href="https://antigravity.google" target="_blank" class="footer-link">Google Antigravity</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

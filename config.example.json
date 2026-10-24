@@ -1,0 +1,8 @@
+{
+  "bot_token": "YOUR_TELEGRAM_BOT_TOKEN_HERE",
+  "allowed_user_ids": [],
+  "pairing_pin": "2551",
+  "google_drive_path": "~/Google Drive/My Drive",
+  "antigravity_bin": "~/.local/bin/agy",
+  "keep_awake": true
+}

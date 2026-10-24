@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# MacRemote logs & runtime
+*.log
+*.pid
+/tmp/
+.DS_Store
+
+# User credentials & tokens
+config.json
+!config.example.json
