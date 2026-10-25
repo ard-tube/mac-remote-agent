@@ -18,6 +18,7 @@
   - **M2 Series:** M2, M2 Pro, M2 Max, M2 Ultra (MacBook Air 13"/15", MacBook Pro 14"/16", Mac mini, Mac Studio, Mac Pro)
   - **M3 Series:** M3, M3 Pro, M3 Max (MacBook Air 13"/15", MacBook Pro 14"/16", iMac)
   - **M4 Series:** M4, M4 Pro, M4 Max (MacBook Pro, Mac mini, iMac)
+  - **M5 and M6 series are supported to with macos tahoe 26 and upper versions
 - 📸 **Retina Screenshot Streaming:** Wakes screen buffer and captures high-res display shots in ~2 seconds.
 - 📂 **Remote Finder Navigation:** Open any directory, view files, or reveal specific files in Finder.
 - 💾 **Google Drive Auto-Sync:** 1-command copying to Google Drive (`Remote_Shared`) with instant mobile sync.
@@ -43,10 +44,10 @@
 | `/sh <command>` | Executes bash/zsh shell command | `/sh git status` |
 
 ### 💬 Natural Language Support
-You can also send natural language requests in English or Turkish:
-- *"take a screenshot"* or *"ss al"*
-- *"open finder ~/Downloads"* or *"finder aç"*
-- *"share report.pdf on drive"* or *"drive'a yükle"*
+You can also send natural language requests in English 
+- *"take a screenshot"
+- *"open finder ~/Downloads"
+- *"share report.pdf on drive"
 - Unrecognized or complex requests are automatically routed to **Google Antigravity AI**!
 
 ---
@@ -106,3 +107,4 @@ To stop or check status:
 ## 📄 License
 
 MIT License. Designed with ❤️ for Apple Silicon and Google Antigravity.
+By Arda Borulu
