@@ -87,10 +87,24 @@ if [[ "$AUTOSTART" =~ ^[Yy]$ ]]; then
     ./install-service.sh
 fi
 
+# Setup global 'mra' CLI command
+mkdir -p "$HOME/.local/bin"
+chmod +x "$DIR/mra"
+ln -sf "$DIR/mra" "$HOME/.local/bin/mra"
+
 echo ""
 echo "=============================================================="
 echo "🎉 Setup Complete!"
 echo "=============================================================="
-echo "To start the agent manually now, run:"
-echo "   ./start.sh"
+echo "You can now control MacRemote from any terminal using:"
+echo "   mra          - Open status dashboard"
+echo "   mra start    - Start in background"
+echo "   mra stop     - Stop agent & all shells"
+echo "   mra run      - Run in current terminal (stops when closed)"
+echo "   mra logs     - View real-time logs"
+echo "   mra pin      - View pairing PIN"
 echo ""
+echo "To start the agent now, simply run:"
+echo "   mra start"
+echo ""
+

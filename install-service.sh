@@ -38,6 +38,11 @@ cat << EOF > "$TARGET_FILE"
 </plist>
 EOF
 
+# Stop any existing running agent instances before loading service
+pkill -f "caffeinate -s -i -m" 2>/dev/null || true
+pkill -f "agent\.py" 2>/dev/null || true
+sleep 1
+
 # Unload previous instance if any
 launchctl unload "$TARGET_FILE" 2>/dev/null || true
 

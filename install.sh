@@ -34,5 +34,5 @@ else
     cd "$INSTALL_DIR"
 fi
 
-chmod +x *.sh
+chmod +x *.sh mra
 ./setup.sh

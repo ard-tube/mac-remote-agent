@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-MacRemote Agent - Control any Apple Silicon Mac from your Android phone via Telegram.
+MacRemote Agent - Control any Apple Silicon Mac from your phone via Telegram.
 Universal support for all Apple M-Series Macs (M1, M2, M3, M4, Air, Pro, Max, Ultra, Studio, Mini).
 Features Antigravity AI integration, Google Drive syncing, and complete macOS automation.
 """
@@ -11,6 +11,10 @@ import json
 import time
 import uuid
 import glob
+import fcntl
+import signal
+import socket
+import atexit
 import shutil
 import logging
 import datetime
@@ -32,31 +36,107 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
 TMP_DIR = "/tmp/mac_remote"
 os.makedirs(TMP_DIR, exist_ok=True)
+LOCK_FILE = os.path.join(TMP_DIR, "mac_remote_agent.lock")
+PID_FILE = os.path.join(BASE_DIR, "agent.pid")
 
 DEFAULT_CONFIG = {
     "bot_token": "",
     "allowed_user_ids": [],
     "pairing_pin": "",
     "google_drive_path": os.path.expanduser("~/Google Drive/My Drive"),
-    "antigravity_bin": "/Users/sddsd/.local/bin/agy",
+    "antigravity_bin": os.path.expanduser("~/.local/bin/agy"),
     "keep_awake": True
 }
+
+lock_file_handle = None
+keep_awake_instance = None
+
+
+def acquire_instance_lock():
+    """Ensures only a single instance of MacRemote Agent runs to prevent 409 Conflict."""
+    global lock_file_handle
+    try:
+        lock_file_handle = open(LOCK_FILE, "a+")
+        fcntl.flock(lock_file_handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        with open(PID_FILE, "w") as pf:
+            pf.write(str(os.getpid()))
+        return True
+    except (IOError, BlockingIOError):
+        existing_pid = None
+        if os.path.exists(PID_FILE):
+            try:
+                with open(PID_FILE, "r") as pf:
+                    existing_pid = pf.read().strip()
+            except Exception:
+                pass
+        err_msg = "❌ Another instance of MacRemote Agent is already running"
+        if existing_pid:
+            err_msg += f" (PID: {existing_pid})"
+        err_msg += "!\nRun 'mra stop' or 'mra restart' to manage it."
+        logger.error(err_msg)
+        return False
+
+
+def cleanup_handler(signum=None, frame=None):
+    """Cleanly terminates child processes, caffeinate assertions, and releases locks."""
+    global keep_awake_instance, lock_file_handle
+    if keep_awake_instance:
+        try:
+            keep_awake_instance.stop()
+        except Exception:
+            pass
+        keep_awake_instance = None
+
+    # Kill any orphaned caffeinate child processes
+    try:
+        subprocess.run(["pkill", "-f", "caffeinate -s -i -m"], capture_output=True, timeout=2)
+    except Exception:
+        pass
+
+    if os.path.exists(PID_FILE):
+        try:
+            os.remove(PID_FILE)
+        except Exception:
+            pass
+
+    if lock_file_handle:
+        try:
+            fcntl.flock(lock_file_handle, fcntl.LOCK_UN)
+            lock_file_handle.close()
+        except Exception:
+            pass
+        lock_file_handle = None
+
+    if signum is not None:
+        logger.info(f"Received signal {signum}. Agent shut down cleanly.")
+        sys.exit(0)
+
+
+# Register signal and exit handlers
+signal.signal(signal.SIGINT, cleanup_handler)
+signal.signal(signal.SIGTERM, cleanup_handler)
+# If started with nohup/daemon, SIGHUP is SIG_IGN - keep it ignored so agent stays alive.
+# If started interactively in a terminal, trap SIGHUP to cleanly shut down child shells when terminal closes.
+if signal.getsignal(signal.SIGHUP) != signal.SIG_IGN:
+    signal.signal(signal.SIGHUP, cleanup_handler)
+atexit.register(cleanup_handler)
+
 
 def load_config():
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
                 cfg = json.load(f)
-                # merge with defaults
                 merged = {**DEFAULT_CONFIG, **cfg}
                 return merged
         except Exception as e:
             logger.error(f"Error loading config.json: {e}")
-    # generate a random 4-digit PIN for first setup
+    # Generate random 4-digit PIN for first setup
     cfg = DEFAULT_CONFIG.copy()
     cfg["pairing_pin"] = f"{int(time.time()) % 9000 + 1000}"
     save_config(cfg)
     return cfg
+
 
 def save_config(cfg):
     try:
@@ -64,6 +144,7 @@ def save_config(cfg):
             json.dump(cfg, f, indent=2)
     except Exception as e:
         logger.error(f"Error saving config.json: {e}")
+
 
 config = load_config()
 
@@ -122,6 +203,27 @@ class TelegramBot:
     def get_me(self):
         return self.request("getMe")
 
+    def set_my_commands(self):
+        """Registers the bot command menu and Menu button on Telegram."""
+        commands = [
+            {"command": "status", "description": "🔋 Battery, AC power, disk & system status"},
+            {"command": "ss", "description": "📸 Take screenshot of Mac screen"},
+            {"command": "finder", "description": "📂 Browse Finder files"},
+            {"command": "drive", "description": "💾 Share file to Google Drive"},
+            {"command": "get", "description": "📥 Download file directly to phone"},
+            {"command": "sh", "description": "⚙️ Run terminal shell command"},
+            {"command": "agy", "description": "🤖 Run Antigravity AI prompt"},
+            {"command": "lock", "description": "🔒 Lock Mac display"},
+            {"command": "help", "description": "ℹ️ Show all available commands"}
+        ]
+        res = self.request("setMyCommands", {"commands": commands})
+        self.request("setChatMenuButton", {"menu_button": {"type": "commands"}})
+        if res.get("ok"):
+            logger.info("Bot commands and menu button successfully registered with Telegram.")
+        else:
+            logger.warning(f"Could not register commands with Telegram: {res.get('error')}")
+        return res
+
     def get_updates(self, offset=None, timeout=25):
         params = {"timeout": timeout}
         if offset is not None:
@@ -132,9 +234,28 @@ class TelegramBot:
             req = urllib.request.Request(url)
             with urllib.request.urlopen(req, timeout=timeout + 10) as response:
                 return json.loads(response.read().decode("utf-8"))
-        except Exception as e:
-            # timeout during long polling is expected
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode("utf-8", errors="ignore")
+            if e.code == 409:
+                logger.warning(
+                    "Telegram 409 Conflict: Another instance is polling getUpdates. "
+                    "Make sure only one bot instance is running. Retrying in 5 seconds..."
+                )
+                time.sleep(5)
+            elif e.code == 401:
+                logger.error("Telegram 401 Unauthorized: Invalid bot token.")
+                time.sleep(10)
+            else:
+                logger.error(f"HTTPError in getUpdates: {e.code} - {err_body}")
+                time.sleep(2)
+            return {"ok": False, "error": err_body}
+        except (urllib.error.URLError, TimeoutError, socket.timeout):
+            # Normal long-polling timeout when no updates arrive
             return {"ok": True, "result": []}
+        except Exception as e:
+            logger.error(f"Exception in getUpdates: {e}")
+            time.sleep(2)
+            return {"ok": False, "error": str(e)}
 
     def send_chat_action(self, chat_id, action="typing"):
         return self.request("sendChatAction", {"chat_id": chat_id, "action": action})
@@ -220,7 +341,7 @@ class SystemActions:
         try:
             # Wake display assertion for 2 seconds to ensure frame buffer is updated
             subprocess.run(["caffeinate", "-u", "-t", "2"], timeout=3)
-            # Capture Retina display as high-quality JPEG
+            # Capture display as JPEG
             res = subprocess.run(
                 ["screencapture", "-x", "-t", "jpg", out_path],
                 capture_output=True,
@@ -246,12 +367,9 @@ class SystemActions:
             return f"❌ Path does not exist: `{target_path}`"
 
         try:
-            # Open Finder window
             subprocess.run(["open", target_path], check=True, timeout=5)
-            # Activate Finder
             subprocess.run(["osascript", "-e", 'tell application "Finder" to activate'], timeout=5)
 
-            # List top files
             items = os.listdir(target_path)
             item_list = []
             for item in sorted(items)[:15]:
@@ -278,7 +396,6 @@ class SystemActions:
 
         resolved_source = os.path.expanduser(source_path.strip())
         if not os.path.exists(resolved_source):
-            # Check Downloads folder fallback
             fallback = os.path.expanduser(f"~/Downloads/{source_path.strip()}")
             if os.path.exists(fallback):
                 resolved_source = fallback
@@ -302,7 +419,7 @@ class SystemActions:
                 f"✅ *Shared to Google Drive!*\n\n"
                 f"📄 *File:* `{filename}` ({file_size_mb:.2f} MB)\n"
                 f"💾 *Drive Location:*\n`Google Drive > My Drive > Remote_Shared > {filename}`\n\n"
-                f"Google Drive will automatically sync this to your Android phone in seconds."
+                f"Google Drive will automatically sync this to your phone in seconds."
             )
         except Exception as e:
             return f"❌ Error copying to Google Drive: {str(e)}"
@@ -320,7 +437,6 @@ class SystemActions:
             is_ac = "AC Power" in batt_out
             power_source = "🔌 Plugged into AC Power" if is_ac else "🔋 Running on Battery"
             lines.append(f"*Power:* {power_source}")
-            # parse percentage
             for part in batt_out.split(";"):
                 if "%" in part:
                     lines.append(f"*Battery Level:* `{part.strip()}`")
@@ -353,7 +469,7 @@ class SystemActions:
         """Puts displays to sleep / locks Mac screen."""
         try:
             subprocess.run(["pmset", "displaysleepnow"], timeout=3)
-            return "🔒 *MacBook screen locked and display turned off.*"
+            return "🔒 *Mac screen locked and display turned off.*"
         except Exception as e:
             return f"❌ Failed to lock: {e}"
 
@@ -378,7 +494,6 @@ class SystemActions:
                 combined += f"\n[stderr]\n{err}"
             if not combined.strip():
                 combined = "[Command executed successfully with no output]"
-            # Trim to Telegram limit
             if len(combined) > 3500:
                 combined = combined[:3500] + "\n...[truncated]"
             return f"```\n{combined}\n```"
@@ -388,11 +503,28 @@ class SystemActions:
             return f"❌ *Execution error:* `{str(e)}`"
 
     @staticmethod
+    def find_antigravity_bin():
+        """Dynamically locates the Antigravity CLI binary."""
+        configured = config.get("antigravity_bin", "")
+        if configured:
+            expanded = os.path.expanduser(configured)
+            if os.path.exists(expanded) and os.access(expanded, os.X_OK):
+                return expanded
+        for p in [
+            os.path.expanduser("~/.local/bin/agy"),
+            os.path.expanduser("~/.gemini/antigravity-ide/bin/agy"),
+            shutil.which("agy")
+        ]:
+            if p and os.path.exists(p) and os.access(p, os.X_OK):
+                return p
+        return configured or "agy"
+
+    @staticmethod
     def run_antigravity(prompt):
         """Runs Antigravity CLI non-interactively with the given prompt."""
-        agy_bin = config.get("antigravity_bin", "/Users/sddsd/.local/bin/agy")
-        if not os.path.exists(agy_bin):
-            return "❌ Antigravity CLI binary not found at " + agy_bin
+        agy_bin = SystemActions.find_antigravity_bin()
+        if not os.path.exists(agy_bin) and not shutil.which(agy_bin):
+            return f"❌ Antigravity CLI binary not found at `{agy_bin}`. Configure in config.json or install Antigravity."
         try:
             cmd = [agy_bin, "-p", prompt]
             res = subprocess.run(
@@ -430,22 +562,31 @@ class KeepAwakeManager:
         logger.info("KeepAwakeManager started (caffeinate assertion active while on AC).")
         while self.running:
             try:
-                # -s: prevent system sleep on AC power
-                # -i: prevent idle sleep
-                # -m: prevent disk sleep
                 self.process = subprocess.Popen(["caffeinate", "-s", "-i", "-m"])
                 self.process.wait()
             except Exception as e:
-                logger.error(f"Caffeinate error: {e}")
-            time.sleep(5)
+                if self.running:
+                    logger.error(f"Caffeinate error: {e}")
+            if self.running:
+                time.sleep(3)
 
     def stop(self):
         self.running = False
         if self.process:
             try:
                 self.process.terminate()
+                self.process.wait(timeout=1)
             except Exception:
-                pass
+                try:
+                    self.process.kill()
+                except Exception:
+                    pass
+            self.process = None
+        # Clean up any orphan caffeinate processes
+        try:
+            subprocess.run(["pkill", "-f", "caffeinate -s -i -m"], capture_output=True, timeout=2)
+        except Exception:
+            pass
 
 
 def handle_message(bot, msg):
@@ -457,42 +598,62 @@ def handle_message(bot, msg):
     if not chat_id or not user_id:
         return
 
+    # Reload config to get latest allowed users in case it was edited
+    global config
+    config = load_config()
     allowed_users = config.get("allowed_user_ids", [])
-    pairing_pin = config.get("pairing_pin", "")
+    pairing_pin = str(config.get("pairing_pin", "")).strip()
 
     # Security / Pairing Verification
     if user_id not in allowed_users:
-        # Check for pairing attempt
-        if text.startswith("/pair") or text == pairing_pin:
-            parts = text.split()
-            provided_pin = parts[1] if len(parts) > 1 else parts[0]
-            if provided_pin == pairing_pin:
+        clean_text = text.strip()
+        candidate_pin = None
+
+        if clean_text == pairing_pin:
+            candidate_pin = clean_text
+        elif clean_text.lower().startswith("/pair"):
+            candidate_pin = clean_text[5:].strip()
+        elif clean_text.lower().startswith("pair "):
+            candidate_pin = clean_text[5:].strip()
+        elif clean_text.lower().startswith("/start"):
+            args = clean_text[6:].strip()
+            if args.lower().startswith("pair_"):
+                candidate_pin = args[5:].strip()
+            elif args.lower().startswith("pair"):
+                candidate_pin = args[4:].strip()
+            elif args:
+                candidate_pin = args
+
+        if candidate_pin and candidate_pin == pairing_pin:
+            if user_id not in config["allowed_user_ids"]:
                 config["allowed_user_ids"].append(user_id)
                 save_config(config)
-                mac_name = get_mac_model_info()
-                bot.send_message(
-                    chat_id,
-                    f"🎉 *Successfully Paired!*\n\n"
-                    f"Welcome, @{username}! Your Android phone is now authorized to control this *{mac_name}*.\n\n"
-                    f"Tap any button below or send commands anytime.",
-                    reply_markup=get_main_keyboard()
-                )
-                logger.info(f"New user paired: {user_id} (@{username})")
-                return
-            else:
-                bot.send_message(
-                    chat_id,
-                    f"❌ *Incorrect PIN.* Check your Mac terminal for the correct 4-digit pairing PIN."
-                )
-                return
-        elif len(allowed_users) == 0:
-            # First user ever: prompt for pairing
+            mac_name = get_mac_model_info()
             bot.send_message(
                 chat_id,
-                f"🔒 *MacRemote Agent - Authorization Required*\n\n"
-                f"To pair your Android phone with this Mac, reply with:\n"
+                f"🎉 *Successfully Paired!*\n\n"
+                f"Welcome, @{username}! Your phone is now authorized to control this *{mac_name}*.\n\n"
+                f"📱 Tap any button below or open the *Menu* to send commands anytime.",
+                reply_markup=get_main_keyboard()
+            )
+            logger.info(f"New user paired: {user_id} (@{username})")
+            return
+        elif candidate_pin and candidate_pin != pairing_pin:
+            bot.send_message(
+                chat_id,
+                f"❌ *Incorrect PIN.* Check your Mac terminal for the correct 4-digit pairing PIN.\n\n"
+                f"Reply with: `/pair {pairing_pin}`"
+            )
+            return
+        elif len(allowed_users) == 0 or clean_text.lower().startswith("/start"):
+            mac_name = get_mac_model_info()
+            bot.send_message(
+                chat_id,
+                f"🔒 *MacRemote Agent for {mac_name}*\n\n"
+                f"Authorization is required to control this Mac.\n\n"
+                f"To pair your phone, tap below or reply with:\n"
                 f"`/pair {pairing_pin}`\n\n"
-                f"*(PIN is displayed in your Mac terminal)*"
+                f"*(Or reply with your PIN: `{pairing_pin}`)*"
             )
             return
         else:
@@ -506,19 +667,32 @@ def handle_message(bot, msg):
     lower_text = text.lower()
     logger.info(f"Received command from {user_id}: {text}")
 
+    # 0. START
+    if lower_text == "/start":
+        mac_name = get_mac_model_info()
+        bot.send_message(
+            chat_id,
+            f"👋 *MacRemote Agent Active!*\n\n"
+            f"Connected to: *{mac_name}*\n"
+            f"Tap any button below or open the *Menu* to send commands.\n"
+            f"Send `/help` for detailed command guide.",
+            reply_markup=get_main_keyboard()
+        )
+        return
+
     # 1. SCREENSHOT
     if lower_text in ["📸 screenshot", "/ss", "ss", "screenshot", "take a ss", "take screenshot", "ekran görüntüsü"]:
         bot.send_chat_action(chat_id, "upload_photo")
         photo_path, err = SystemActions.take_screenshot()
         if photo_path and os.path.exists(photo_path):
-            caption = f"📸 *MacBook Screen* • {datetime.datetime.now().strftime('%H:%M:%S')}"
+            caption = f"📸 *Mac Screen* • {datetime.datetime.now().strftime('%H:%M:%S')}"
             bot.send_photo(chat_id, photo_path, caption=caption)
             try:
                 os.remove(photo_path)
             except Exception:
                 pass
         else:
-            bot.send_message(chat_id, f"❌ Failed to capture screen: {err}")
+            bot.send_message(chat_id, f"❌ Failed to capture screen: {err}", reply_markup=get_main_keyboard())
 
     # 2. STATUS
     elif lower_text in ["🔋 status", "/status", "status", "battery", "durum", "pil"]:
@@ -529,7 +703,6 @@ def handle_message(bot, msg):
     # 3. OPEN FINDER
     elif lower_text.startswith("/finder") or lower_text.startswith("open finder") or lower_text == "📂 open finder":
         bot.send_chat_action(chat_id, "typing")
-        # Extract path if provided
         target = ""
         if lower_text.startswith("/finder"):
             target = text[len("/finder"):].strip()
@@ -550,7 +723,6 @@ def handle_message(bot, msg):
             result = SystemActions.share_to_google_drive(filepath)
             bot.send_message(chat_id, result, reply_markup=get_main_keyboard())
         else:
-            # Show Google Drive Remote_Shared folder info
             drive_folder = os.path.join(config.get("google_drive_path", ""), "Remote_Shared")
             os.makedirs(drive_folder, exist_ok=True)
             files = os.listdir(drive_folder)
@@ -564,7 +736,7 @@ def handle_message(bot, msg):
             )
             bot.send_message(chat_id, msg, reply_markup=get_main_keyboard())
 
-    # 5. GET / DOWNLOAD FILE TO PHONE DIRECTLY
+    # 5. GET / DOWNLOAD FILE DIRECTLY TO PHONE
     elif lower_text.startswith("/get") or lower_text.startswith("/file") or lower_text.startswith("send me"):
         bot.send_chat_action(chat_id, "upload_document")
         target = text.split(maxsplit=1)[1].strip() if " " in text else ""
@@ -575,11 +747,11 @@ def handle_message(bot, msg):
         if os.path.exists(resolved) and os.path.isfile(resolved):
             size_mb = os.path.getsize(resolved) / (1024 * 1024)
             if size_mb > 48:
-                bot.send_message(chat_id, f"⚠️ File is too large for Telegram ({size_mb:.1f} MB > 50MB limit). Use `/drive {target}` instead!")
+                bot.send_message(chat_id, f"⚠️ File is too large for direct Telegram transfer ({size_mb:.1f} MB > 50MB limit). Use `/drive {target}` instead!", reply_markup=get_main_keyboard())
             else:
                 bot.send_document(chat_id, resolved, caption=f"📄 {os.path.basename(resolved)}")
         else:
-            bot.send_message(chat_id, f"❌ File not found: `{target}`")
+            bot.send_message(chat_id, f"❌ File not found: `{target}`", reply_markup=get_main_keyboard())
 
     # 6. LOCK SCREEN
     elif lower_text in ["🔒 lock screen", "/lock", "lock", "kilitle"]:
@@ -594,7 +766,7 @@ def handle_message(bot, msg):
         res = SystemActions.run_terminal(cmd)
         bot.send_message(chat_id, res, reply_markup=get_main_keyboard())
 
-    # 8. ANTIGRAVITY AI EXPLICIT
+    # 8. ANTIGRAVITY AI
     elif lower_text.startswith("/agy ") or lower_text.startswith("antigravity ") or lower_text == "🤖 antigravity ai":
         bot.send_chat_action(chat_id, "typing")
         if lower_text == "🤖 antigravity ai":
@@ -604,7 +776,7 @@ def handle_message(bot, msg):
                 f"Send me any task or prompt, for example:\n"
                 f"`/agy write a python script to organize my desktop`\n"
                 f"`/agy summarize my recent git commits`\n\n"
-                f"Antigravity will run on your Mac and report the results right here!",
+                f"Antigravity will execute on your Mac and report the results right here!",
                 reply_markup=get_main_keyboard()
             )
         else:
@@ -613,12 +785,12 @@ def handle_message(bot, msg):
             res = SystemActions.run_antigravity(prompt)
             bot.send_message(chat_id, res, reply_markup=get_main_keyboard())
 
-    # 9. START / HELP
-    elif lower_text in ["/start", "/help", "help", "yardım"]:
+    # 9. HELP
+    elif lower_text in ["/help", "help", "yardım"]:
         mac_name = get_mac_model_info()
         help_text = (
             f"🚀 *MacRemote Agent for {mac_name}*\n\n"
-            f"Control your Mac anytime, anywhere from your Android phone:\n\n"
+            f"Control your Mac anytime, anywhere from your phone:\n\n"
             f"📸 *Screenshot:* Tap `📸 Screenshot` or type `/ss`\n"
             f"🔋 *Battery & Power:* Tap `🔋 Status` or type `/status`\n"
             f"📂 *Open Finder:* Tap `📂 Open Finder` or type `/finder <path>`\n"
@@ -627,17 +799,13 @@ def handle_message(bot, msg):
             f"⚙️ *Run Command:* Type `/sh <command>`\n"
             f"🤖 *Antigravity Agent:* Type `/agy <prompt>`\n"
             f"🔒 *Lock Screen:* Tap `🔒 Lock Screen` or type `/lock`\n\n"
-            f"💬 *Natural Language:* You can also type natural requests like:\n"
-            f"• _\"take a screenshot\"_\n"
-            f"• _\"open finder ~/Downloads\"_\n"
-            f"• _\"share ~/Documents/report.pdf on drive\"_"
+            f"💡 *Menu Button:* Tap the blue *Menu* button in the corner to see all commands."
         )
         bot.send_message(chat_id, help_text, reply_markup=get_main_keyboard())
 
     # 10. NATURAL LANGUAGE SMART ROUTING
     else:
         bot.send_chat_action(chat_id, "typing")
-        # Check natural language patterns
         if any(w in lower_text for w in ["screenshot", "screen shot", "ss al", "ekran"]):
             photo_path, err = SystemActions.take_screenshot()
             if photo_path:
@@ -656,7 +824,6 @@ def handle_message(bot, msg):
             return
 
         if "drive" in lower_text and any(w in lower_text for w in ["share", "copy", "at", "yükle", "open"]):
-            # look for a file path
             words = text.split()
             found_path = None
             for w in words:
@@ -668,7 +835,7 @@ def handle_message(bot, msg):
                 bot.send_message(chat_id, res, reply_markup=get_main_keyboard())
                 return
 
-        # Fallback to Antigravity AI!
+        # Fallback to Antigravity AI
         bot.send_message(chat_id, f"🤖 *Consulting Antigravity for:* \"{text}\"...")
         res = SystemActions.run_antigravity(text)
         bot.send_message(chat_id, res, reply_markup=get_main_keyboard())
@@ -676,13 +843,18 @@ def handle_message(bot, msg):
 
 def main():
     logger.info("Starting MacRemote Agent...")
+
+    # Single-instance lock check
+    if not acquire_instance_lock():
+        sys.exit(1)
+
     bot_token = config.get("bot_token", "").strip()
 
     if not bot_token:
         print("\n" + "="*60)
         print("⚠️  TELEGRAM BOT TOKEN REQUIRED")
         print("="*60)
-        print("1. Open Telegram on your Android phone.")
+        print("1. Open Telegram on your phone.")
         print("2. Search for '@BotFather' and tap START.")
         print("3. Send: /newbot")
         print("4. Follow the prompts to choose a Name and Username for your bot.")
@@ -702,17 +874,21 @@ def main():
     bot_info = me.get("result", {})
     logger.info(f"Bot connected: @{bot_info.get('username')} ({bot_info.get('first_name')})")
 
+    # Register command menu and Menu button on Telegram
+    bot.set_my_commands()
+
     # Start sleep prevention daemon
+    global keep_awake_instance
     if config.get("keep_awake", True):
-        keep_awake = KeepAwakeManager()
-        keep_awake.start()
+        keep_awake_instance = KeepAwakeManager()
+        keep_awake_instance.start()
 
     pin = config.get("pairing_pin")
     allowed = config.get("allowed_user_ids", [])
     if not allowed:
         print("\n" + "="*60)
         print(f"🔑 BOT READY FOR PAIRING!")
-        print(f"Open Telegram on your Android phone, start @{bot_info.get('username')},")
+        print(f"Open Telegram on your phone, start @{bot_info.get('username')},")
         print(f"and send this command:")
         print(f"   /pair {pin}")
         print("="*60 + "\n")
@@ -720,7 +896,7 @@ def main():
         logger.info(f"Authorized users: {allowed}")
 
     offset = None
-    logger.info("Agent is listening for remote commands from your Android phone...")
+    logger.info("Agent is listening for remote commands from your phone...")
 
     while True:
         try:
@@ -731,12 +907,17 @@ def main():
                     msg = update.get("message")
                     if msg:
                         handle_message(bot, msg)
+            else:
+                time.sleep(2)
         except KeyboardInterrupt:
             logger.info("Shutting down MacRemote Agent...")
             break
         except Exception as e:
             logger.error(f"Unexpected loop exception: {e}")
             time.sleep(3)
+
+    cleanup_handler()
+
 
 if __name__ == "__main__":
     main()

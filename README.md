@@ -6,7 +6,7 @@
 [![Antigravity](https://img.shields.io/badge/Agent-Google%20Antigravity%20AI-purple?style=for-the-badge)](https://antigravity.google)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
 
-> Control any **Apple Silicon Mac (M1, M2, M3, M4 / Air, Pro, Mini, Studio)** from your **Android phone** anytime, anywhere.
+> Control any **Apple Silicon Mac (M1, M2, M3, M4 / Air, Pro, Mini, Studio)** from your **phone** anytime, anywhere via Telegram.
 > Featuring instant Retina screenshots, Finder automation, Google Drive syncing, and full **Google Antigravity AI** integration.
 
 ---
@@ -18,7 +18,8 @@
   - **M2 Series:** M2, M2 Pro, M2 Max, M2 Ultra (MacBook Air 13"/15", MacBook Pro 14"/16", Mac mini, Mac Studio, Mac Pro)
   - **M3 Series:** M3, M3 Pro, M3 Max (MacBook Air 13"/15", MacBook Pro 14"/16", iMac)
   - **M4 Series:** M4, M4 Pro, M4 Max (MacBook Pro, Mac mini, iMac)
-  - **M5 and M6 series are supported to with macos tahoe 26 and upper versions
+- 💻 **Instant `mra` CLI Access:** Control, start, stop, monitor, or view live logs from anywhere by typing `mra` in Terminal.
+- 📱 **Telegram Bot Commands Menu:** All commands automatically registered and visible on your phone in the Telegram **Menu** button.
 - 📸 **Retina Screenshot Streaming:** Wakes screen buffer and captures high-res display shots in ~2 seconds.
 - 📂 **Remote Finder Navigation:** Open any directory, view files, or reveal specific files in Finder.
 - 💾 **Google Drive Auto-Sync:** 1-command copying to Google Drive (`Remote_Shared`) with instant mobile sync.
@@ -26,11 +27,31 @@
 - 🤖 **Antigravity AI Agent Bridge:** Delegate coding, debugging, or complex automation tasks to Antigravity CLI directly from your phone.
 - 🔌 **Smart Clamshell Keep-Awake:** Prevents sleep while plugged into AC power even with lid closed.
 - 🔒 **End-to-End Pairing Security:** PIN-protected pairing ensures only your authorized phone can command your Mac.
-- 🌐 **Zero Port Forwarding:** Uses outbound HTTPS long-polling. Works on cellular data, cafe Wi-Fi, or home networks.
+- 🛡️ **Clean Lifecycle & Conflict Protection:** OS-level singleton locking prevents duplicate instance conflicts (HTTP 409), and clean signal handling ensures all subshells and caffeinate processes shut down properly.
 
 ---
 
-## 📱 Quick Command Reference
+## 💻 Quick Terminal Access: `mra`
+
+Type `mra` in any terminal window to access the agent controller:
+
+```bash
+mra          # Open status dashboard and quick actions
+mra start    # Start agent in background (stays alive after closing terminal)
+mra stop     # Stop agent and cleanly shut down all subshells & processes
+mra restart  # Cleanly restart agent
+mra run      # Run in foreground (closes cleanly when terminal is closed)
+mra status   # Check agent, battery %, and AC power status
+mra logs     # Stream real-time agent logs (tail -f)
+mra pin      # Display your 4-digit pairing PIN & Telegram command
+mra service  # Manage 24/7 background macOS LaunchAgent
+```
+
+---
+
+## 📱 Bot Commands & Phone Controls
+
+Tap the blue **Menu** button in Telegram or tap the persistent keyboard buttons:
 
 | Button / Command | Action | Example |
 | :--- | :--- | :--- |
@@ -42,12 +63,13 @@
 | `🔋 Status` or `/status` | Shows battery %, AC power, disk space, and uptime | `/status` |
 | `🔒 Lock Screen` or `/lock` | Locks your Mac screen and puts display to sleep | `/lock` |
 | `/sh <command>` | Executes bash/zsh shell command | `/sh git status` |
+| `/help` | Displays command list and usage guide | `/help` |
 
 ### 💬 Natural Language Support
-You can also send natural language requests in English 
-- *"take a screenshot"
-- *"open finder ~/Downloads"
-- *"share report.pdf on drive"
+You can also send natural language requests in plain text:
+- *"take a screenshot"*
+- *"open finder ~/Downloads"*
+- *"share report.pdf on drive"*
 - Unrecognized or complex requests are automatically routed to **Google Antigravity AI**!
 
 ---
@@ -55,7 +77,7 @@ You can also send natural language requests in English
 ## ⚡ 2-Minute Setup
 
 ### 1. Create a Bot on Telegram
-1. On your Android phone, open Telegram and message `@BotFather`.
+1. On your phone, open Telegram and message `@BotFather`.
 2. Send `/newbot`, name your bot (e.g. `MyMacBookBot`), and copy the **API Token**.
 
 ### 2. Run Setup on your Mac
@@ -68,11 +90,11 @@ Enter your Bot Token when prompted.
 
 ### 3. Pair your Phone
 1. Open your bot in Telegram on your phone and tap **Start**.
-2. Send the pairing command:
+2. Tap or send the pairing command:
    ```text
    /pair <PIN>
    ```
-   *(Your PIN is shown in terminal or inside `config.json`).*
+   *(Your PIN is shown in terminal or by running `mra pin`).*
 
 ---
 
@@ -94,12 +116,12 @@ sudo pmset -a disablesleep 1
 
 Install the persistent macOS LaunchAgent service:
 ```bash
-./install-service.sh
+mra service install
 ```
 To stop or check status:
 ```bash
-./status.sh
-./stop.sh
+mra status
+mra stop
 ```
 
 ---
