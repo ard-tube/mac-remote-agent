@@ -30,7 +30,7 @@ The macOS menu-bar app provides Telegram and relay settings, task review, local 
 open dist/MacRemote.app
 ```
 
-In the app, enter your Telegram bot token, optional Antigravity and Claude Code executable paths, and the folder the agents should work in. Configure the relay URL, host ID, and host token only if using relay control. Configuration is stored under `~/Library/Application Support/MacRemote`. The app bundle is an unsigned development build.
+In the app, enter your Telegram bot token, optional Antigravity and Claude Code executable paths, and the folder the agents should work in. Configure the relay URL, host ID, and host token only if using relay control. Configuration is stored under `~/Library/Application Support/MacRemote`. The app is ad-hoc signed to keep its bundle valid, but it is not Developer ID signed or notarized. macOS Gatekeeper may block downloaded preview builds; a trusted public build requires an Apple Developer ID certificate and notarization.
 
 ## 🪟 Windows Host App Preview
 

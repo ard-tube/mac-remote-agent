@@ -95,5 +95,5 @@ jobs:
             dist/MacRemote-Windows.zip \
             dist/app-debug.apk \
             --title "MacRemote ${GITHUB_REF_NAME} preview" \
-            --notes "Preview builds for testing. The macOS app is unsigned, the Windows package is not code-signed, and the Android APK is a debug build. Do not use these as production releases." \
+            --notes "Preview builds for testing. The macOS app is ad-hoc signed but not Developer ID signed or notarized, the Windows package is not code-signed, and the Android APK is a debug build. macOS Gatekeeper may block the downloaded app. Do not use these as production releases." \
             --prerelease

@@ -1,6 +1,6 @@
 # MacRemote Android preview
 
-This Kotlin app connects to a MacRemote relay over HTTPS. It can request host status, screenshots, open-folder and lock actions, submit coding-agent tasks, and display recent command results. The host must approve coding-agent tasks locally before execution.
+This Kotlin app connects to a MacRemote relay over HTTPS. Its dark blue interface separates Home, Control, Activity, and Settings behind an animated bottom dock. It can request host status, screenshots, open-folder and lock actions, submit coding-agent tasks, and display recent command results. The host must approve coding-agent tasks locally before execution.
 
 ## Build
 
