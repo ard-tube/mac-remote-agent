@@ -31,10 +31,13 @@ jobs:
           swift build --package-path macos --configuration release
           bash macos/build-app.sh
           ditto -c -k --sequesterRsrc --keepParent dist/MacRemote.app dist/MacRemote-macOS.zip
+          python cli/package_release.py
       - uses: actions/upload-artifact@v4
         with:
           name: macos-preview
-          path: dist/MacRemote-macOS.zip
+          path: |
+            dist/MacRemote-macOS.zip
+            dist/MacRemote-CLI.tar
           if-no-files-found: error
 
   windows:
@@ -95,5 +98,5 @@ jobs:
             dist/MacRemote-Windows.zip \
             dist/app-debug.apk \
             --title "MacRemote ${GITHUB_REF_NAME} preview" \
-            --notes "Preview builds for testing. The macOS app is ad-hoc signed but not Developer ID signed or notarized, the Windows package is not code-signed, and the Android APK is a debug build. macOS Gatekeeper may block the downloaded app. Do not use these as production releases." \
+            --notes "Includes the terminal-first macOS CLI archive, optional macOS and Windows app previews, and Android debug APK. The CLI dashboard binds to localhost and preserves local approval for coding-agent tasks. The optional macOS app is ad-hoc signed but not Developer ID signed or notarized, the Windows package is not code-signed, and the Android APK is a debug build. macOS Gatekeeper may block the optional downloaded app. Do not use the preview builds as production releases." \
             --prerelease

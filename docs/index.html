@@ -397,8 +397,8 @@
   <section class="section" id="setup">
     <div class="section-container">
       <div class="section-header">
-        <h2 class="section-title">Build the app previews</h2>
-        <p class="section-desc">Each platform has its own build instructions. These development builds are not signed public releases.</p>
+        <h2 class="section-title">Start with MacRemote</h2>
+        <p class="section-desc">Use the terminal-first Mac host and private local dashboard, or build the optional desktop and Android previews.</p>
       </div>
 
       <div class="setup-tabs">
@@ -410,13 +410,22 @@
 
         <div class="tab-content" id="tabContent0">
           <div class="setup-step">
+            <div class="step-badge">Recommended</div>
+            <h3>Install the terminal-first Mac host</h3>
+            <p>Install with Homebrew or the one-line installer. The local dashboard manages pairing, configuration, logs, and host-side task approvals without opening the preview app bundle.</p>
+            <div class="code-box">
+              <code>brew tap ard-tube/mac-remote-agent https://github.com/ard-tube/mac-remote-agent &amp;&amp; brew install macremote &amp;&amp; macremote start</code>
+            </div>
+            <p>Or run <code>curl -fsSL https://raw.githubusercontent.com/ard-tube/mac-remote-agent/main/install.sh | sh</code>. The dashboard listens only on <code>127.0.0.1</code>; coding-agent requests still require local approval.</p>
+          </div>
+          <div class="setup-step">
             <div class="step-badge">macOS</div>
-            <h3>Build the native menu-bar app</h3>
+            <h3>Optional native menu-bar app preview</h3>
             <p>Use a Mac with macOS 13+, Swift 5.9+, and Python 3 installed.</p>
             <div class="code-box">
               <code>swift build --package-path macos --configuration release &amp;&amp; bash macos/build-app.sh</code>
             </div>
-            <p>Open <code>dist/MacRemote.app</code>. This preview is not Developer ID signed or notarized, so macOS Gatekeeper may block downloaded copies.</p>
+            <p>Open <code>dist/MacRemote.app</code>. This optional preview is not Developer ID signed or notarized, so macOS Gatekeeper may block downloaded copies.</p>
           </div>
         </div>
 
