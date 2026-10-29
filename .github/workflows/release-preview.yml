@@ -94,6 +94,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" \
+            dist/MacRemote-CLI.tar \
             dist/MacRemote-macOS.zip \
             dist/MacRemote-Windows.zip \
             dist/app-debug.apk \

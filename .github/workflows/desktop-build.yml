@@ -16,6 +16,7 @@ on:
       - "relay/**"
       - "tests/**"
       - ".github/workflows/desktop-build.yml"
+      - ".github/workflows/release-preview.yml"
 
 permissions:
   contents: read
