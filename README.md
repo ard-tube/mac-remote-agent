@@ -25,17 +25,16 @@
 
 ## ⌨️ Recommended: terminal app and local dashboard
 
-Install the Mac CLI with Homebrew:
+Install and open the Mac host dashboard in one command with Homebrew:
 
 ```bash
-brew tap ard-tube/mac-remote-agent https://github.com/ard-tube/mac-remote-agent
-brew install macremote
+brew install ard-tube/mac-remote-agent/macremote && macremote start
 ```
 
-Or use the one-line installer:
+Or use the standalone installer:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ard-tube/mac-remote-agent/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/ard-tube/mac-remote-agent/main/install.sh | sh -s -- --start
 ```
 
 Then start MacRemote and open its local dashboard:
@@ -44,7 +43,7 @@ Then start MacRemote and open its local dashboard:
 macremote start
 ```
 
-The dashboard is bound to `127.0.0.1`, requires a private local token, and uses no third-party QR service. Add your self-hosted HTTPS relay details in **Settings**, then scan the locally generated pairing code with the Android app. Incoming coding-agent prompts remain pending until you explicitly approve them on the Mac; remote shell execution is disabled.
+The dashboard is bound to `127.0.0.1`, requires a private local token, and uses no third-party QR service. It remains available even before a connection is configured. To connect Android, you need credentials from an HTTPS relay; this repository does not currently operate a public relay. Incoming coding-agent prompts remain pending until you explicitly approve them on the Mac; remote shell execution is disabled.
 
 ```bash
 macremote status     # Host, daemon, relay, and dashboard status

@@ -10,12 +10,22 @@ if [ "${1:-}" = "--legacy" ]; then
   exec "$SCRIPT_DIR/setup.sh"
 fi
 
-VERSION="v0.2.0-preview.1"
+START_AFTER_INSTALL=0
+case "${1:-}" in
+  "") ;;
+  --start) START_AFTER_INSTALL=1 ;;
+  *)
+    echo "Usage: install.sh [--start]" >&2
+    exit 2
+    ;;
+esac
+
+VERSION="v0.2.0-preview.2"
 REPOSITORY="ard-tube/mac-remote-agent"
 INSTALL_DIR="${MACREMOTE_INSTALL_DIR:-$HOME/.local/lib/macremote}"
 BIN_DIR="${MACREMOTE_BIN_DIR:-$HOME/.local/bin}"
 ARCHIVE_URL="https://github.com/$REPOSITORY/releases/download/$VERSION/MacRemote-CLI.tar"
-ARCHIVE_SHA256="a8f5806a09531566ed05379356be88381bf28a87980f8b39f88ed7b05e2843a0"
+ARCHIVE_SHA256="3718d582e761983feed07b8c4c933c99878eac6a29f40dc38653908525fdcf65"
 
 if [ "$(uname -s)" != "Darwin" ]; then
   echo "The MacRemote host daemon currently supports macOS only." >&2
@@ -52,3 +62,6 @@ case ":$PATH:" in
   *) echo "Add $BIN_DIR to PATH to use the macremote command." ;;
 esac
 echo "Installed MacRemote CLI. Start it with: $BIN_DIR/macremote start"
+if [ "$START_AFTER_INSTALL" -eq 1 ]; then
+  "$BIN_DIR/macremote" start
+fi

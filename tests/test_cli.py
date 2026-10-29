@@ -49,6 +49,38 @@ class MacRemoteCliTests(unittest.TestCase):
         self.assertIsNone(macremote.make_pairing_uri({**config, "relay_phone_token": "short"}))
         self.assertIsNone(macremote.make_pairing_uri({**config, "relay_host_id": "é" * 24}))
 
+    def test_connection_requires_a_bot_token_or_complete_relay_credentials(self):
+        self.assertFalse(macremote._connection_configured({}))
+        self.assertTrue(macremote._connection_configured({"bot_token": "telegram-token"}))
+        relay = {
+            "relay_url": "https://relay.example.com",
+            "relay_host_id": "host_123456789012",
+            "relay_host_token": "host-token",
+        }
+        self.assertTrue(macremote._connection_configured(relay))
+        self.assertFalse(macremote._connection_configured({**relay, "relay_host_token": ""}))
+        self.assertFalse(macremote._connection_configured({**relay, "relay_url": "http://relay.example.com"}))
+
+    def test_dashboard_supervisor_stays_alive_without_a_host_connection(self):
+        class StopAfterSecondWait:
+            def __init__(self):
+                self.wait_count = 0
+
+            def wait(self, _timeout):
+                self.wait_count += 1
+                return self.wait_count == 2
+
+        stop_event = StopAfterSecondWait()
+        server = SimpleNamespace(
+            agent_restart_event=threading.Event(),
+            agent_process=None,
+            agent_message="No connection configured",
+        )
+        agent = SimpleNamespace(load_config=lambda: {})
+        macremote._supervise_host_agent(stop_event, server, agent, Path("agent.py"), io.StringIO())
+        self.assertEqual(stop_event.wait_count, 2)
+        self.assertIsNone(server.agent_process)
+
     def test_config_updates_are_allowlisted_validated_and_private(self):
         with tempfile.TemporaryDirectory() as temporary:
             config_path = Path(temporary) / "config.json"
@@ -119,6 +151,8 @@ class MacRemoteCliTests(unittest.TestCase):
                     mock.patch.object(macremote, "LOG_FILE", log_path):
                 server = macremote.ThreadingHTTPServer(("127.0.0.1", 0), macremote._make_handler(token))
                 server.agent_process = SimpleNamespace(poll=lambda: None)
+                server.agent_message = "Ready"
+                server.agent_restart_event = threading.Event()
                 thread = threading.Thread(target=server.serve_forever, daemon=True)
                 thread.start()
                 base_url = f"http://127.0.0.1:{server.server_port}"
@@ -135,6 +169,20 @@ class MacRemoteCliTests(unittest.TestCase):
                     with mock.patch.object(macremote, "_load_config", return_value={"relay_url": ""}):
                         with urllib.request.urlopen(request, timeout=2) as response:
                             self.assertTrue(json.loads(response.read())["agent_running"])
+
+                    request = urllib.request.Request(
+                        f"{base_url}/api/config",
+                        data=b'{"working_directory":"/tmp"}',
+                        method="POST",
+                        headers={
+                            "Authorization": f"Bearer {token}",
+                            "Content-Type": "application/json",
+                        },
+                    )
+                    with mock.patch.object(macremote, "_save_config", return_value={"working_directory": "/tmp"}):
+                        with urllib.request.urlopen(request, timeout=2) as response:
+                            self.assertEqual(response.status, 200)
+                    self.assertTrue(server.agent_restart_event.is_set())
 
                     request = urllib.request.Request(
                         f"{base_url}/api/config",

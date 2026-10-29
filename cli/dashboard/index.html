@@ -25,8 +25,9 @@
         <header class="topbar"><div><p class="eyebrow">YOUR LOCAL WORKSPACE</p><h1 id="page-title">Overview</h1></div><div class="host-chip"><span id="host-indicator" class="indicator"></span><span id="host-state">Connecting…</span></div></header>
         <div id="toast" class="toast" role="status" hidden></div>
         <section class="page active" id="section-overview">
+          <div id="setup-notice" class="setup-notice" hidden><div><strong id="setup-title">Finish your one-time connection setup</strong><p id="setup-description">Choose Telegram or enter your HTTPS relay details. The dashboard stays open while you set this up.</p></div><button class="secondary-button" data-open-section="settings">Open setup</button></div>
           <div class="hero-card">
-            <div class="hero-copy"><p class="eyebrow">MACREMOTE HOST</p><h2>Your computer,<br><em>within reach.</em></h2><p>Review remote requests, connect a phone, and keep an eye on your host from one private dashboard.</p><button class="primary-button" data-open-section="approvals">Review approvals <span>→</span></button></div>
+            <div class="hero-copy"><p class="eyebrow">MACREMOTE HOST</p><h2>Your computer,<br><em>within reach.</em></h2><p>Review remote requests, connect a phone, and keep an eye on your host from one private dashboard.</p><button id="hero-action" class="primary-button" data-open-section="approvals">Review approvals <span>→</span></button></div>
             <div class="hero-orbit"><div class="orbit orbit-one"></div><div class="orbit orbit-two"></div><div class="orbit-core">M</div><span class="orbit-dot dot-one"></span><span class="orbit-dot dot-two"></span><span class="orbit-dot dot-three"></span></div>
           </div>
           <div class="stats-grid">
@@ -55,7 +56,7 @@
           </div>
         </section>
         <section class="page" id="section-settings">
-          <div class="page-intro"><p>Settings are stored in your MacRemote config file. Secret values are only served to this authenticated, local browser.</p></div>
+          <div class="page-intro"><p>Pick one connection method below. Telegram needs a bot token; Android phone pairing needs credentials from an HTTPS MacRemote relay. Secrets stay in your local Mac configuration.</p></div>
           <form id="settings-form" class="settings-grid">
             <article class="panel settings-panel"><p class="eyebrow">PHONE CONNECTION</p><label>Relay URL<input name="relay_url" type="url" placeholder="https://relay.example.com" autocomplete="off"></label><label>Host ID<input name="relay_host_id" autocomplete="off"></label><label>Host token<input name="relay_host_token" type="password" autocomplete="new-password"></label><label>Phone token<input name="relay_phone_token" type="password" autocomplete="new-password"></label></article>
             <article class="panel settings-panel"><p class="eyebrow">HOST AGENT</p><label>Working directory<input name="working_directory" autocomplete="off"></label><label>Claude Code path<input name="claude_bin" autocomplete="off"></label><label>Antigravity path<input name="antigravity_bin" autocomplete="off"></label><label>Telegram bot token<input name="bot_token" type="password" autocomplete="new-password"></label><label>Allowed Telegram user IDs<input name="allowed_user_ids" placeholder="12345, 67890" autocomplete="off"></label><label class="toggle-label"><span>Keep Mac awake while connected to power<small>Uses the agent's existing keep-awake option.</small></span><input name="keep_awake" type="checkbox"></label></article>
