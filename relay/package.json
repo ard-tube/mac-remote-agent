@@ -1,0 +1,13 @@
+{
+  "name": "macremote-relay",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Authenticated store-and-forward relay for MacRemote host and phone clients",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  }
+}

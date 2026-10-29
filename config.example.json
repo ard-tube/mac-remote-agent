@@ -4,5 +4,10 @@
   "pairing_pin": "2551",
   "google_drive_path": "~/Google Drive/My Drive",
   "antigravity_bin": "~/.local/bin/agy",
+  "claude_bin": "",
+  "working_directory": "~/",
+  "relay_url": "",
+  "relay_host_id": "",
+  "relay_host_token": "",
   "keep_awake": true
 }

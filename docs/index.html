@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MacRemote — Control Any Apple Silicon Mac from Android</title>
-  <meta name="description" content="Universal remote control for all Apple Silicon M-Series Macs (M1/M2/M3/M4). Control macOS, take Retina screenshots, manage Finder, sync Google Drive, and run Antigravity AI from your Android phone.">
+  <title>MacRemote — Your Mac and Windows PC, within reach</title>
+  <meta name="description" content="A native Mac or Windows host app, secure relay, and phone controls for status, screenshots, folders, and coding-agent tasks that require local approval.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -28,12 +28,15 @@
           </svg>
         </span>
         <span class="brand-name">MacRemote</span>
-        <span class="brand-badge">Apple Silicon</span>
+        <span class="brand-badge">Mac + Windows</span>
       </a>
-      <nav class="nav-links">
+      <button class="mobile-menu-toggle" type="button" aria-expanded="false" aria-controls="primaryNav" aria-label="Open navigation">
+        <span></span><span></span><span></span>
+      </button>
+      <nav class="nav-links" id="primaryNav">
         <a href="#features">Features</a>
         <a href="#simulator">Live Demo</a>
-        <a href="#compatibility">M-Series Support</a>
+        <a href="#compatibility">Platforms</a>
         <a href="#architecture">Architecture</a>
         <a href="#setup">Setup</a>
       </nav>
@@ -53,34 +56,33 @@
     <div class="hero-container">
       <div class="badge-pill">
         <span class="badge-dot"></span>
-        <span>Universal M-Series Edition • M1, M2, M3, M4 Macs</span>
+        <span>One small host app · controls from your phone</span>
       </div>
       <h1 class="hero-title">
-        Control Any <span class="gradient-text">Apple Silicon Mac</span><br>
-        Directly From Your Android Phone.
+        Your computer,<br>
+        <span class="gradient-text">within reach.</span>
       </h1>
       <p class="hero-subtitle">
-        Leave your MacBook plugged in at home with the lid closed. Send natural commands or tap instant buttons on your Android phone to stream Retina screenshots, browse Finder, sync Google Drive, and harness Google Antigravity AI anywhere.
+        MacRemote pairs a lightweight Mac or Windows host app with phone controls for status, screenshots, folders, and coding-agent tasks. Every agent task waits for approval at the computer before it runs.
       </p>
 
       <div class="install-bar">
         <span class="install-prefix">$</span>
-        <code id="installCommand">git clone https://github.com/ard-tube/mac-remote-agent.git ~/mac-remote-agent &amp;&amp; cd ~/mac-remote-agent &amp;&amp; ./setup.sh</code>
+        <code id="installCommand">git clone https://github.com/ard-tube/mac-remote-agent.git</code>
         <button class="btn-copy" onclick="copyInstallCmd()" title="Copy command">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
             <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
           </svg>
-          <span id="copyFeedback">Copy</span>
+          <span id="copyFeedback">Copy command</span>
         </button>
       </div>
 
       <div class="hero-badges">
-        <div class="chip-badge"><span>⚡</span> M1 / M2 / M3 / M4</div>
-        <div class="chip-badge"><span>🔒</span> E2E PIN Paired</div>
-        <div class="chip-badge"><span>🌐</span> Zero Port Forwarding</div>
-        <div class="chip-badge"><span>🔋</span> Clamshell Keep-Awake</div>
-        <div class="chip-badge"><span>🤖</span> Google Antigravity AI</div>
+        <div class="chip-badge"><span>⌘</span> macOS host</div>
+        <div class="chip-badge"><span>⊞</span> Windows host</div>
+        <div class="chip-badge"><span>🔒</span> Host approval for agent tasks</div>
+        <div class="chip-badge"><span>🌐</span> Outbound relay connection</div>
       </div>
     </div>
   </section>
@@ -89,8 +91,8 @@
   <section class="section" id="simulator">
     <div class="section-container">
       <div class="section-header">
-        <h2 class="section-title">Interactive Android Phone Simulator</h2>
-        <p class="section-desc">Experience how seamless it is. Click any button below on the Android phone to see real-time macOS responses.</p>
+        <h2 class="section-title">A clear view of remote control</h2>
+        <p class="section-desc">Explore a visual concept of the phone experience. This interactive demo is illustrative and does not send commands to a computer.</p>
       </div>
 
       <div class="simulator-wrapper">
@@ -104,18 +106,18 @@
               <div class="chat-user">
                 <div class="chat-avatar">🍎</div>
                 <div class="chat-info">
-                  <div class="chat-name">My Mac Remote Bot <span class="verified">✓</span></div>
+                  <div class="chat-name">MacRemote Host <span class="verified">✓</span></div>
                   <div class="chat-status">bot • online</div>
                 </div>
               </div>
-              <div class="chat-mac-chip" id="chipIndicator">Apple M3</div>
+              <div class="chat-mac-chip" id="chipIndicator">Mac / PC</div>
             </div>
 
             <!-- Chat Messages Log -->
             <div class="chat-messages" id="chatMessages">
               <div class="chat-bubble bot">
                 <div class="bubble-text">
-                  🎉 <strong>Paired with Apple Silicon Mac!</strong><br>
+                  🎉 <strong>MacRemote host connected!</strong><br>
                   Ready for remote commands. Tap any shortcut below or type freely.
                 </div>
                 <span class="bubble-time">23:45</span>
@@ -160,28 +162,28 @@
                 <div class="step-num">1</div>
                 <div>
                   <strong>You tap or type from anywhere</strong>
-                  <p>Over cellular (5G/4G) or Wi-Fi. Message is sent instantly via Telegram's secure HTTPS cloud.</p>
+                  <p>Use Telegram or the Android companion app over Wi-Fi or cellular. The Android app connects through your HTTPS relay.</p>
                 </div>
               </li>
               <li>
                 <div class="step-num">2</div>
                 <div>
                   <strong>MacBook receives via Long-Polling</strong>
-                  <p>Your Mac makes outbound HTTPS requests. No router firewall openings, static IPs, or VPNs required.</p>
+                  <p>The host receives commands through short outbound HTTPS polls. No router firewall openings, static IPs, or VPNs are required.</p>
                 </div>
               </li>
               <li>
                 <div class="step-num">3</div>
                 <div>
-                  <strong>Native macOS Engine Executes</strong>
-                  <p>Wakes frame buffer for crisp Retina screenshots, drives Finder via AppleScript, or delegates to Antigravity AI.</p>
+                  <strong>Host app handles approved actions</strong>
+                  <p>Built-in actions use an allowlist. Coding-agent prompts wait for approval on the computer before running.</p>
                 </div>
               </li>
               <li>
                 <div class="step-num">4</div>
                 <div>
                   <strong>Direct Delivery to Your Phone</strong>
-                  <p>Images, files, and AI results appear directly in your Telegram chat within seconds.</p>
+                  <p>Command status and results return to your phone. The relay is not end-to-end encrypted; host it only on infrastructure you trust.</p>
                 </div>
               </li>
             </ul>
@@ -191,81 +193,77 @@
     </div>
   </section>
 
-  <!-- Universal M-Series Compatibility Matrix -->
+  <!-- Supported host and phone platforms -->
   <section class="section" id="compatibility">
     <div class="section-container">
       <div class="section-header">
-        <h2 class="section-title">Engineered for All Apple Silicon M-Series</h2>
-        <p class="section-desc">Fully optimized across every generation of Apple Silicon hardware. Dynamically detects your model and processor architecture.</p>
+        <h2 class="section-title">One phone. Two desktop platforms.</h2>
+        <p class="section-desc">MacRemote is built around a small host app on your computer and phone clients that talk to it through a self-hosted HTTPS relay.</p>
       </div>
 
       <div class="matrix-grid">
         <div class="matrix-card">
           <div class="matrix-header">
-            <span class="m-chip m1">M1</span>
+            <span class="m-chip m1">Mac</span>
             <div>
-              <h3>Apple M1 Series</h3>
-              <span class="chip-specs">M1 • M1 Pro • M1 Max • M1 Ultra</span>
+              <h3>macOS host app</h3>
+              <span class="chip-specs">SwiftUI menu bar · Python host</span>
             </div>
           </div>
-          <p class="matrix-desc">The trailblazer generation. Full power assertion and sleep control support.</p>
+          <p class="matrix-desc">A native menu-bar app for agent approvals, activity, relay settings, and managing the local host process.</p>
           <div class="model-tags">
-            <span class="tag">MacBook Air 13"</span>
-            <span class="tag">MacBook Pro 13"/14"/16"</span>
-            <span class="tag">Mac mini</span>
-            <span class="tag">iMac 24"</span>
-            <span class="tag">Mac Studio</span>
+            <span class="tag">macOS 13+</span>
+            <span class="tag">Unsigned preview</span>
+            <span class="tag">Local task approval</span>
           </div>
         </div>
 
         <div class="matrix-card">
           <div class="matrix-header">
-            <span class="m-chip m2">M2</span>
+            <span class="m-chip m2">PC</span>
             <div>
-              <h3>Apple M2 Series</h3>
-              <span class="chip-specs">M2 • M2 Pro • M2 Max • M2 Ultra</span>
+              <h3>Windows host app</h3>
+              <span class="chip-specs">Window + system tray controls</span>
             </div>
           </div>
-          <p class="matrix-desc">High-efficiency media engine. Instant JPEG screenshot hardware compression.</p>
+          <p class="matrix-desc">A desktop and tray app for managing the host agent and reviewing tasks locally. Windows runtime verification is still needed.</p>
           <div class="model-tags">
-            <span class="tag">MacBook Air 13"/15"</span>
-            <span class="tag">MacBook Pro 14"/16"</span>
-            <span class="tag">Mac mini</span>
-            <span class="tag">Mac Studio</span>
-            <span class="tag">Mac Pro</span>
+            <span class="tag">Windows 10/11</span>
+            <span class="tag">Local task approval</span>
+            <span class="tag">Preview build</span>
           </div>
         </div>
 
         <div class="matrix-card featured">
-          <div class="matrix-badge">Hardware Accelerated</div>
+          <div class="matrix-badge">Build preview</div>
           <div class="matrix-header">
-            <span class="m-chip m3">M3</span>
+            <span class="m-chip m3">App</span>
             <div>
-              <h3>Apple M3 Series</h3>
-              <span class="chip-specs">M3 • M3 Pro • M3 Max</span>
+              <h3>Android companion</h3>
+              <span class="chip-specs">Kotlin app · HTTPS relay</span>
             </div>
           </div>
-          <p class="matrix-desc">Next-gen 3nm architecture. Instant Antigravity AI execution and dynamic sleep override.</p>
+          <p class="matrix-desc">Phone controls for host status, screenshots, folders, locking, and coding-agent requests that wait for local approval.</p>
           <div class="model-tags">
-            <span class="tag">MacBook Air 13"/15"</span>
-            <span class="tag">MacBook Pro 14"/16"</span>
-            <span class="tag">iMac 24"</span>
+            <span class="tag">HTTPS only</span>
+            <span class="tag">Encrypted token storage</span>
+            <span class="tag">Debug APK workflow</span>
           </div>
         </div>
 
         <div class="matrix-card">
           <div class="matrix-header">
-            <span class="m-chip m4">M4</span>
+            <span class="m-chip m4">iOS</span>
             <div>
-              <h3>Apple M4 Series</h3>
-              <span class="chip-specs">M4 • M4 Pro • M4 Max</span>
+              <h3>Telegram control</h3>
+              <span class="chip-specs">Existing bot-based iPhone path</span>
             </div>
           </div>
-          <p class="matrix-desc">Maximum neural performance for autonomous on-device Antigravity AI agent workloads.</p>
+          <p class="matrix-desc">The repository's existing Telegram bot supports built-in host controls and coding-agent prompts with local approval.</p>
           <div class="model-tags">
-            <span class="tag">MacBook Pro 14"/16"</span>
-            <span class="tag">Mac mini</span>
-            <span class="tag">iMac</span>
+            <span class="tag">Telegram bot</span>
+            <span class="tag">Pairing + allowlist</span>
+            <span class="tag">Agent approval queue</span>
           </div>
         </div>
       </div>
@@ -277,7 +275,7 @@
     <div class="section-container">
       <div class="section-header">
         <h2 class="section-title">System Architecture</h2>
-        <p class="section-desc">Zero open ports. Zero third-party cloud servers. Direct communication via Telegram's end-to-end encrypted protocol.</p>
+        <p class="section-desc">No inbound ports are needed. The phone and host connect to your HTTPS relay. Relay traffic is not end-to-end encrypted, so use infrastructure you trust.</p>
       </div>
 
       <div class="architecture-diagram">
@@ -287,54 +285,54 @@
           <!-- Flow Line 2 -->
           <path d="M 470 160 L 610 160" stroke="#818cf8" stroke-width="2.5" stroke-dasharray="6 6"/>
 
-          <!-- Box 1: Android Phone -->
+          <!-- Box 1: Phone -->
           <g transform="translate(40, 70)">
             <rect width="150" height="180" rx="16" fill="#18181b" stroke="#38bdf8" stroke-width="2"/>
             <text x="75" y="40" fill="#38bdf8" font-size="28" text-anchor="middle">📱</text>
-            <text x="75" y="75" fill="#ffffff" font-family="'Plus Jakarta Sans', sans-serif" font-weight="700" font-size="16" text-anchor="middle">Android Phone</text>
-            <text x="75" y="100" fill="#a1a1aa" font-family="'Plus Jakarta Sans', sans-serif" font-size="12" text-anchor="middle">Telegram App</text>
+            <text x="75" y="75" fill="#ffffff" font-family="'Plus Jakarta Sans', sans-serif" font-weight="700" font-size="16" text-anchor="middle">Phone Client</text>
+            <text x="75" y="100" fill="#a1a1aa" font-family="'Plus Jakarta Sans', sans-serif" font-size="12" text-anchor="middle">Telegram / Android</text>
             <text x="75" y="125" fill="#a1a1aa" font-family="'Plus Jakarta Sans', sans-serif" font-size="11" text-anchor="middle">4G / 5G / Wi-Fi</text>
             <rect x="25" y="140" width="100" height="24" rx="12" fill="#0284c7" fill-opacity="0.2"/>
             <text x="75" y="156" fill="#38bdf8" font-family="'Plus Jakarta Sans', sans-serif" font-weight="600" font-size="11" text-anchor="middle">Mobile Client</text>
           </g>
 
-          <!-- Box 2: Telegram Cloud -->
+          <!-- Box 2: HTTPS relay -->
           <g transform="translate(325, 70)">
             <rect width="160" height="180" rx="16" fill="#18181b" stroke="#818cf8" stroke-width="2"/>
             <text x="80" y="40" fill="#818cf8" font-size="28" text-anchor="middle">☁️</text>
-            <text x="80" y="75" fill="#ffffff" font-family="'Plus Jakarta Sans', sans-serif" font-weight="700" font-size="16" text-anchor="middle">Telegram Cloud</text>
-            <text x="80" y="100" fill="#a1a1aa" font-family="'Plus Jakarta Sans', sans-serif" font-size="12" text-anchor="middle">End-to-End HTTPS</text>
-            <text x="80" y="125" fill="#a1a1aa" font-family="'Plus Jakarta Sans', sans-serif" font-size="11" text-anchor="middle">Long Polling API</text>
+            <text x="80" y="75" fill="#ffffff" font-family="'Plus Jakarta Sans', sans-serif" font-weight="700" font-size="16" text-anchor="middle">Your Relay</text>
+            <text x="80" y="100" fill="#a1a1aa" font-family="'Plus Jakarta Sans', sans-serif" font-size="12" text-anchor="middle">HTTPS + SQLite</text>
+            <text x="80" y="125" fill="#a1a1aa" font-family="'Plus Jakarta Sans', sans-serif" font-size="11" text-anchor="middle">Self-hosted service</text>
             <rect x="25" y="140" width="110" height="24" rx="12" fill="#6366f1" fill-opacity="0.2"/>
-            <text x="80" y="156" fill="#818cf8" font-family="'Plus Jakarta Sans', sans-serif" font-weight="600" font-size="11" text-anchor="middle">Zero Port Forward</text>
+            <text x="80" y="156" fill="#818cf8" font-family="'Plus Jakarta Sans', sans-serif" font-weight="600" font-size="11" text-anchor="middle">TLS required</text>
           </g>
 
-          <!-- Box 3: Apple Silicon Mac -->
+          <!-- Box 3: Desktop host -->
           <g transform="translate(605, 50)">
             <rect width="250" height="220" rx="16" fill="#18181b" stroke="#34d399" stroke-width="2"/>
             <text x="125" y="35" fill="#34d399" font-size="28" text-anchor="middle">🍏</text>
-            <text x="125" y="65" fill="#ffffff" font-family="'Plus Jakarta Sans', sans-serif" font-weight="700" font-size="16" text-anchor="middle">Apple Silicon Mac</text>
-            <text x="125" y="85" fill="#a1a1aa" font-family="'Plus Jakarta Sans', sans-serif" font-size="12" text-anchor="middle">M1 / M2 / M3 / M4 (Plugged in)</text>
+            <text x="125" y="65" fill="#ffffff" font-family="'Plus Jakarta Sans', sans-serif" font-weight="700" font-size="16" text-anchor="middle">Mac or Windows Host</text>
+            <text x="125" y="85" fill="#a1a1aa" font-family="'Plus Jakarta Sans', sans-serif" font-size="12" text-anchor="middle">Outbound HTTPS connection</text>
             
             <!-- Submodules inside Mac -->
             <rect x="20" y="100" width="100" height="42" rx="8" fill="#27272a"/>
-            <text x="70" y="118" fill="#e4e4e7" font-size="11" font-weight="600" text-anchor="middle">📸 Screencapture</text>
-            <text x="70" y="132" fill="#a1a1aa" font-size="9" text-anchor="middle">Retina display</text>
+            <text x="70" y="118" fill="#e4e4e7" font-size="11" font-weight="600" text-anchor="middle">📸 Screenshot</text>
+            <text x="70" y="132" fill="#a1a1aa" font-size="9" text-anchor="middle">Host display</text>
 
             <rect x="130" y="100" width="100" height="42" rx="8" fill="#27272a"/>
-            <text x="180" y="118" fill="#e4e4e7" font-size="11" font-weight="600" text-anchor="middle">📂 Finder Script</text>
-            <text x="180" y="132" fill="#a1a1aa" font-size="9" text-anchor="middle">AppleScript / Shell</text>
+            <text x="180" y="118" fill="#e4e4e7" font-size="11" font-weight="600" text-anchor="middle">📂 Open Folder</text>
+            <text x="180" y="132" fill="#a1a1aa" font-size="9" text-anchor="middle">Local OS action</text>
 
             <rect x="20" y="150" width="100" height="42" rx="8" fill="#27272a"/>
-            <text x="70" y="168" fill="#e4e4e7" font-size="11" font-weight="600" text-anchor="middle">💾 Google Drive</text>
-            <text x="70" y="182" fill="#a1a1aa" font-size="9" text-anchor="middle">Local Auto-Sync</text>
+            <text x="70" y="168" fill="#e4e4e7" font-size="11" font-weight="600" text-anchor="middle">🔒 Lock Screen</text>
+            <text x="70" y="182" fill="#a1a1aa" font-size="9" text-anchor="middle">Built-in actions</text>
 
             <rect x="130" y="150" width="100" height="42" rx="8" fill="#27272a"/>
-            <text x="180" y="168" fill="#e4e4e7" font-size="11" font-weight="600" text-anchor="middle">🤖 Antigravity AI</text>
-            <text x="180" y="182" fill="#a1a1aa" font-size="9" text-anchor="middle">agy autonomous</text>
+            <text x="180" y="168" fill="#e4e4e7" font-size="11" font-weight="600" text-anchor="middle">🤖 Agent Task</text>
+            <text x="180" y="182" fill="#a1a1aa" font-size="9" text-anchor="middle">Local approval first</text>
 
             <rect x="20" y="200" width="210" height="14" rx="4" fill="#10b981" fill-opacity="0.15"/>
-            <text x="125" y="210" fill="#34d399" font-size="9" font-weight="600" text-anchor="middle">⚡ Clamshell Keep-Awake Active</text>
+            <text x="125" y="210" fill="#34d399" font-size="9" font-weight="600" text-anchor="middle">⚡ Allowlisted remote actions</text>
           </g>
         </svg>
       </div>
@@ -345,105 +343,104 @@
   <section class="section" id="features">
     <div class="section-container">
       <div class="section-header">
-        <h2 class="section-title">Core Capabilities</h2>
-        <p class="section-desc">Everything you need to operate your Mac remotely with total peace of mind.</p>
+        <h2 class="section-title">Built for deliberate remote control</h2>
+        <p class="section-desc">Simple host actions, local approval for agent work, and a relay connection you control.</p>
       </div>
 
       <div class="features-grid">
         <div class="feature-card">
           <div class="feature-icon icon-cyan">📸</div>
-          <h3>Retina Display Streaming</h3>
-          <p>Captures your Mac screen in full native Retina resolution, compresses it using hardware acceleration to ~700KB, and streams it back in 2 seconds.</p>
-          <div class="feature-cmd"><code>/ss</code> or <code>"take a screenshot"</code></div>
+          <h3>Status and screenshots</h3>
+          <p>Request a host status summary or a screenshot from your phone. The Android preview displays returned screenshots; Telegram remains available for the existing bot flow.</p>
+          <div class="feature-cmd"><code>status</code> · <code>screenshot</code></div>
         </div>
 
         <div class="feature-card">
           <div class="feature-icon icon-blue">📂</div>
-          <h3>Remote Finder &amp; File Manager</h3>
-          <p>Open Finder at any directory, list recent files, or reveal specific items. Browse your Mac from your phone as if you were sitting right in front of it.</p>
-          <div class="feature-cmd"><code>/finder ~/Downloads</code></div>
+          <h3>Open a folder</h3>
+          <p>Ask the host to open a selected path in its native file manager. The relay exposes this built-in action instead of arbitrary remote shell commands.</p>
+          <div class="feature-cmd"><code>open_folder</code></div>
         </div>
 
         <div class="feature-card">
           <div class="feature-icon icon-emerald">💾</div>
-          <h3>Google Drive Cloud Sync</h3>
-          <p>Copy any file or directory into your Mac's Google Drive sync folder. Google Drive immediately uploads it, making it ready on your Android phone in seconds.</p>
-          <div class="feature-cmd"><code>/drive report.pdf</code></div>
+          <h3>Antigravity and Claude Code</h3>
+          <p>Submit a coding-agent task from the phone. The host shows the prompt for local review and runs it only after a person approves it.</p>
+          <div class="feature-cmd"><code>agent_task</code></div>
         </div>
 
         <div class="feature-card">
           <div class="feature-icon icon-purple">🤖</div>
-          <h3>Google Antigravity AI Bridge</h3>
-          <p>Harness the full power of Antigravity AI on your Mac. Send complex programming, debugging, and file organization prompts straight to the Antigravity CLI.</p>
-          <div class="feature-cmd"><code>/agy organize desktop files</code></div>
+          <h3>Native host controls</h3>
+          <p>Use a macOS menu-bar app or a Windows window and tray app to review work, manage the host process, and check its activity.</p>
+          <div class="feature-cmd"><code>Mac · Windows</code></div>
         </div>
 
         <div class="feature-card">
           <div class="feature-icon icon-amber">🔌</div>
-          <h3>Smart Clamshell Sleep Override</h3>
-          <p>Leave your MacBook plugged into power with the lid closed. MacRemote prevents idle and closed-lid sleep assertions so your Mac remains active 24/7.</p>
-          <div class="feature-cmd"><code>./clamshell-config.sh enable</code></div>
+          <h3>Secure relay connection</h3>
+          <p>The host makes outbound HTTPS requests, so it needs no inbound router port. The relay can read task prompts and results, so self-host it on trusted infrastructure.</p>
+          <div class="feature-cmd"><code>HTTPS required</code></div>
         </div>
 
         <div class="feature-card">
           <div class="feature-icon icon-red">🔒</div>
-          <h3>PIN-Protected Security</h3>
-          <p>Secured with a 4-digit pairing PIN and strict Telegram User ID whitelisting. Strangers cannot message or command your Mac under any circumstance.</p>
-          <div class="feature-cmd"><code>/pair &lt;PIN&gt;</code></div>
+          <h3>Restricted remote actions</h3>
+          <p>Phone commands are validated against a small allowlist. Agent requests wait for host approval, and remote shell execution is disabled.</p>
+          <div class="feature-cmd"><code>approve · reject</code></div>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- Step-by-Step Setup Guide -->
+  <!-- Build previews -->
   <section class="section" id="setup">
     <div class="section-container">
       <div class="section-header">
-        <h2 class="section-title">Get Started in 3 Simple Steps</h2>
-        <p class="section-desc">No complicated network settings. You will be up and running in less than 3 minutes.</p>
+        <h2 class="section-title">Build the app previews</h2>
+        <p class="section-desc">Each platform has its own build instructions. These development builds are not signed public releases.</p>
       </div>
 
       <div class="setup-tabs">
         <div class="tab-buttons">
-          <button class="tab-btn active" onclick="switchTab(0)">1. Create Telegram Bot</button>
-          <button class="tab-btn" onclick="switchTab(1)">2. Run Setup on Mac</button>
-          <button class="tab-btn" onclick="switchTab(2)">3. Pair from Phone</button>
+          <button class="tab-btn active" onclick="switchTab(0)">macOS host</button>
+          <button class="tab-btn" onclick="switchTab(1)">Windows host</button>
+          <button class="tab-btn" onclick="switchTab(2)">Android companion</button>
         </div>
 
         <div class="tab-content" id="tabContent0">
           <div class="setup-step">
-            <div class="step-badge">Step 1</div>
-            <h3>Create your free Telegram Bot</h3>
-            <p>1. Open the <strong>Telegram app</strong> on your Android phone.</p>
-            <p>2. Search for <code>@BotFather</code> and tap <strong>Start</strong>.</p>
-            <p>3. Send: <code class="inline-code">/newbot</code></p>
-            <p>4. Choose a display name (e.g. <em>My MacBook</em>) and a bot username (e.g. <em>my_mac_remote_bot</em>).</p>
-            <p>5. Copy the <strong>HTTP API Token</strong> provided (e.g. <code>792837492:AAF...</code>).</p>
+            <div class="step-badge">macOS</div>
+            <h3>Build the native menu-bar app</h3>
+            <p>Use a Mac with macOS 13+, Swift 5.9+, and Python 3 installed.</p>
+            <div class="code-box">
+              <code>swift build --package-path macos --configuration release &amp;&amp; bash macos/build-app.sh</code>
+            </div>
+            <p>Open <code>dist/MacRemote.app</code>. This preview is unsigned and has not been notarized.</p>
           </div>
         </div>
 
         <div class="tab-content hidden" id="tabContent1">
           <div class="setup-step">
-            <div class="step-badge">Step 2</div>
-            <h3>Run the automated installer on your Mac</h3>
-            <p>Open Terminal on your Apple Silicon Mac and paste this 1-line command:</p>
+            <div class="step-badge">Windows</div>
+            <h3>Package the desktop and tray app</h3>
+            <p>Build from Windows with Python 3.9+ and PowerShell:</p>
             <div class="code-box">
-              <code>git clone https://github.com/ard-tube/mac-remote-agent.git ~/mac-remote-agent &amp;&amp; cd ~/mac-remote-agent &amp;&amp; ./setup.sh</code>
+              <code>.\windows\build-app.ps1</code>
             </div>
-            <p>The interactive script will prompt for your token, configure sleep prevention on AC power, and set up the background 24/7 service.</p>
+            <p>The package is written to <code>dist\MacRemote-Windows.zip</code>. Verify the preview on a Windows machine before relying on it.</p>
           </div>
         </div>
 
         <div class="tab-content hidden" id="tabContent2">
           <div class="setup-step">
-            <div class="step-badge">Step 3</div>
-            <h3>Pair your Android Phone</h3>
-            <p>1. Open your new bot on Telegram from your phone and tap <strong>Start</strong>.</p>
-            <p>2. Send the pairing command shown in your terminal:</p>
+            <div class="step-badge">Android</div>
+            <h3>Build the companion APK</h3>
+            <p>Use Java 17, Android SDK 35, and Gradle 8.9:</p>
             <div class="code-box">
-              <code>/pair 2551</code>
+              <code>cd android &amp;&amp; gradle --no-daemon :app:assembleDebug</code>
             </div>
-            <p>3. You will immediately receive a success message with interactive buttons! You're ready to control your Mac from anywhere!</p>
+            <p>This creates a debug APK. First deploy the relay behind HTTPS, then pair using its host ID and the phone token. See <a href="https://github.com/ard-tube/mac-remote-agent/blob/main/relay/README.md" target="_blank" rel="noreferrer">relay setup and security notes</a>.</p>
           </div>
         </div>
       </div>
@@ -455,13 +452,13 @@
     <div class="footer-container">
       <div class="footer-left">
         <span class="brand-name">MacRemote</span>
-        <p>Universal Remote Agent for Apple Silicon Macs &amp; Google Antigravity.</p>
+        <p>Phone control for Mac and Windows hosts.</p>
         <p class="copyright">Open source under MIT License • Created for the developer community.</p>
       </div>
       <div class="footer-right">
         <a href="https://github.com/ard-tube/mac-remote-agent" target="_blank" class="footer-link">GitHub Repository</a>
         <a href="https://github.com/ard-tube/mac-remote-agent/issues" target="_blank" class="footer-link">Report Issue</a>
-        <a href="https://antigravity.google" target="_blank" class="footer-link">Google Antigravity</a>
+        <a href="https://github.com/ard-tube/mac-remote-agent/releases" target="_blank" rel="noreferrer" class="footer-link">Releases</a>
       </div>
     </div>
   </footer>
