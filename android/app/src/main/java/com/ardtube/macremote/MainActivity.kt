@@ -162,6 +162,34 @@ private enum class AppSection(val title: String, val label: String, val icon: Im
     SETTINGS("Connection", "Settings", Icons.Outlined.Settings),
 }
 
+private val MacRemoteColorScheme = darkColorScheme(
+    primary = Color(0xFF83B8FF),
+    onPrimary = Color(0xFF09213D),
+    primaryContainer = Color(0xFF173B63),
+    onPrimaryContainer = Color(0xFFD8E9FF),
+    secondary = Color(0xFF72D8E5),
+    onSecondary = Color(0xFF06252B),
+    background = Color(0xFF07111F),
+    onBackground = Color(0xFFEAF2FC),
+    surface = Color(0xFF0D1A2A),
+    onSurface = Color(0xFFEAF2FC),
+    surfaceVariant = Color(0xFF18283C),
+    onSurfaceVariant = Color(0xFFA8B8CD),
+    surfaceContainerLow = Color(0xFF0C1928),
+    surfaceContainer = Color(0xFF112137),
+    surfaceContainerHigh = Color(0xFF192B42),
+    outline = Color(0xFF52657D),
+    error = Color(0xFFFF9AA8),
+    onError = Color(0xFF3A0710),
+)
+
+private enum class AppSection(val title: String, val label: String, val icon: ImageVector) {
+    HOME("Your workspace", "Home", Icons.Outlined.Home),
+    CONTROL("Remote control", "Control", Icons.Outlined.Tune),
+    ACTIVITY("Activity", "Activity", Icons.Outlined.History),
+    SETTINGS("Connection", "Settings", Icons.Outlined.Settings),
+}
+
 private data class RelaySettings(
     val relayUrl: String = "",
     val hostId: String = "",
