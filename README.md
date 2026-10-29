@@ -1,6 +1,6 @@
 # 🚀 MacRemote — Phone Control for Mac and Windows
 
-[![macOS](https://img.shields.io/badge/macOS-Apple%20Silicon%20(M1%2FM2%2FM3%2FM4)-black?logo=apple&style=for-the-badge)](https://apple.com)
+[![macOS](https://img.shields.io/badge/macOS-Apple%20Silicon%20(M1/M6)-black?logo=apple&style=for-the-badge)](https://apple.com)
 [![Python](https://img.shields.io/badge/Python-3.9%2B-blue?logo=python&style=for-the-badge)](https://python.org)
 [![Telegram](https://img.shields.io/badge/Control-Telegram%20Bot%20API-0088cc?logo=telegram&style=for-the-badge)](https://telegram.org)
 [![Antigravity](https://img.shields.io/badge/Agent-Google%20Antigravity%20AI-purple?style=for-the-badge)](https://antigravity.google)
