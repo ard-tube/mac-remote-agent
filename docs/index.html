@@ -68,7 +68,7 @@
 
       <div class="install-bar">
         <span class="install-prefix">$</span>
-        <code id="installCommand">brew install ard-tube/mac-remote-agent/macremote &amp;&amp; macremote start</code>
+        <code id="installCommand">brew update &amp;&amp; brew install --force ard-tube/mac-remote-agent/macremote &amp;&amp; macremote start</code>
         <button class="btn-copy" onclick="copyInstallCmd()" title="Copy command">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
@@ -414,7 +414,7 @@
             <h3>Install the terminal-first Mac host</h3>
             <p>Copy this single command. It installs the Mac host and opens the local setup dashboard—no repository clone, build commands, or extra terminal steps.</p>
             <div class="code-box">
-              <code>brew install ard-tube/mac-remote-agent/macremote &amp;&amp; macremote start</code>
+              <code>brew update &amp;&amp; brew install --force ard-tube/mac-remote-agent/macremote &amp;&amp; macremote start</code>
             </div>
             <p>The dashboard opens on this Mac and stays available while you set up a connection. Phone control requires HTTPS relay credentials; this project does not currently operate a public relay. The dashboard listens only on <code>127.0.0.1</code>, and coding-agent requests still require local approval.</p>
           </div>
