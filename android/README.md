@@ -14,6 +14,6 @@ The installable preview APK is written to `app/build/outputs/apk/debug/app-debug
 
 ## Pair
 
-Run and expose the relay only behind HTTPS; see [`../relay/README.md`](../relay/README.md). Provision a host to receive a host ID, host token, and phone token. Enter the host token in the desktop host app and the phone token in this app. The app requires an HTTPS origin and stores the connection settings encrypted with a key in Android Keystore.
+Run and expose the relay only behind HTTPS; see [`../relay/README.md`](../relay/README.md). Provision a host to receive a host ID, host token, and phone token. Enter the host token in the host settings and the phone token in this app. You can scan the MacRemote dashboard's local QR code or open its `macremote://pair` link to import the relay URL, host ID, and phone token. Review the values and tap **Save connection**; the app requires an HTTPS origin and stores the settings encrypted with a key in Android Keystore.
 
 The relay is not end-to-end encrypted. Its operator can read queued prompts, screenshots, and command results.

@@ -1,38 +1,54 @@
-#!/usr/bin/env bash
-# ==============================================================================
-# MacRemote Agent 1-Line Installer for macOS Apple Silicon
-# ==============================================================================
+#!/bin/sh
+set -eu
 
-set -e
-
-INSTALL_DIR="$HOME/mac-remote-agent"
-REPO_URL="https://github.com/ard-tube/mac-remote-agent.git"
-
-echo "=============================================================="
-echo "    🚀 Installing MacRemote Agent for Apple Silicon Macs"
-echo "=============================================================="
-
-# Check macOS & Apple Silicon
-if [[ "$(uname)" != "Darwin" ]]; then
-    echo "❌ Error: MacRemote Agent requires macOS."
+if [ "${1:-}" = "--legacy" ]; then
+  SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+  if [ ! -f "$SCRIPT_DIR/setup.sh" ]; then
+    echo "Run the legacy installer from a repository checkout." >&2
     exit 1
+  fi
+  exec "$SCRIPT_DIR/setup.sh"
 fi
 
-ARCH="$(uname -m)"
-if [[ "$ARCH" != "arm64" ]]; then
-    echo "⚠️ Warning: Detected non-arm64 architecture ($ARCH). Designed for Apple Silicon (M1/M2/M3/M4)."
+VERSION="v0.2.0-preview.1"
+REPOSITORY="ard-tube/mac-remote-agent"
+INSTALL_DIR="${MACREMOTE_INSTALL_DIR:-$HOME/.local/lib/macremote}"
+BIN_DIR="${MACREMOTE_BIN_DIR:-$HOME/.local/bin}"
+ARCHIVE_URL="https://github.com/$REPOSITORY/releases/download/$VERSION/MacRemote-CLI.tar"
+ARCHIVE_SHA256="a8f5806a09531566ed05379356be88381bf28a87980f8b39f88ed7b05e2843a0"
+
+if [ "$(uname -s)" != "Darwin" ]; then
+  echo "The MacRemote host daemon currently supports macOS only." >&2
+  exit 1
+fi
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "MacRemote requires Python 3.9 or newer. Install Python 3 and rerun this installer." >&2
+  exit 1
 fi
 
-# Clone or pull repo
-if [ -d "$INSTALL_DIR" ]; then
-    echo "Updating existing installation in $INSTALL_DIR..."
-    cd "$INSTALL_DIR"
-    git pull origin main || true
-else
-    echo "Cloning repository to $INSTALL_DIR..."
-    git clone "$REPO_URL" "$INSTALL_DIR"
-    cd "$INSTALL_DIR"
-fi
+TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/macremote-install.XXXXXX")"
+trap 'rm -rf "$TMP_DIR"' EXIT
+trap 'exit 1' HUP INT TERM
 
-chmod +x *.sh mra
-./setup.sh
+echo "Downloading MacRemote CLI $VERSION..."
+curl --fail --location --silent --show-error "$ARCHIVE_URL" -o "$TMP_DIR/MacRemote-CLI.tar"
+printf '%s  %s\n' "$ARCHIVE_SHA256" "$TMP_DIR/MacRemote-CLI.tar" | shasum -a 256 -c >/dev/null || {
+  echo "The downloaded MacRemote archive failed its SHA-256 integrity check." >&2
+  exit 1
+}
+mkdir -p "$INSTALL_DIR" "$BIN_DIR"
+tar -xf "$TMP_DIR/MacRemote-CLI.tar" -C "$INSTALL_DIR"
+cat > "$BIN_DIR/macremote" <<EOF
+#!/bin/sh
+exec python3 "$INSTALL_DIR/macremote.py" "\$@"
+EOF
+chmod 755 "$BIN_DIR/macremote"
+
+if ! command -v qrencode >/dev/null 2>&1; then
+  echo "Note: install qrencode (for example: brew install qrencode) to show pairing QR codes."
+fi
+case ":$PATH:" in
+  *":$BIN_DIR:"*) ;;
+  *) echo "Add $BIN_DIR to PATH to use the macremote command." ;;
+esac
+echo "Installed MacRemote CLI. Start it with: $BIN_DIR/macremote start"

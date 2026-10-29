@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <title>MacRemote · Local control</title>
+    <link rel="stylesheet" href="/app.css">
+    <script defer src="/app.js"></script>
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <a class="brand" href="#" aria-label="MacRemote home"><span class="brand-mark">M</span><span>MacRemote<small>LOCAL CONTROL</small></span></a>
+        <nav class="navigation" aria-label="Main navigation">
+          <button class="nav-link active" data-section="overview"><span>◈</span> Overview</button>
+          <button class="nav-link" data-section="approvals"><span>✓</span> Approvals <b id="pending-count">0</b></button>
+          <button class="nav-link" data-section="pairing"><span>⌘</span> Pair phone</button>
+          <button class="nav-link" data-section="settings"><span>⚙</span> Settings</button>
+          <button class="nav-link" data-section="logs"><span>≋</span> Live logs</button>
+        </nav>
+        <div class="sidebar-note"><span class="pulse"></span><span>Private to this Mac<small>Dashboard is bound to 127.0.0.1</small></span></div>
+      </aside>
+      <main class="main">
+        <header class="topbar"><div><p class="eyebrow">YOUR LOCAL WORKSPACE</p><h1 id="page-title">Overview</h1></div><div class="host-chip"><span id="host-indicator" class="indicator"></span><span id="host-state">Connecting…</span></div></header>
+        <div id="toast" class="toast" role="status" hidden></div>
+        <section class="page active" id="section-overview">
+          <div class="hero-card">
+            <div class="hero-copy"><p class="eyebrow">MACREMOTE HOST</p><h2>Your computer,<br><em>within reach.</em></h2><p>Review remote requests, connect a phone, and keep an eye on your host from one private dashboard.</p><button class="primary-button" data-open-section="approvals">Review approvals <span>→</span></button></div>
+            <div class="hero-orbit"><div class="orbit orbit-one"></div><div class="orbit orbit-two"></div><div class="orbit-core">M</div><span class="orbit-dot dot-one"></span><span class="orbit-dot dot-two"></span><span class="orbit-dot dot-three"></span></div>
+          </div>
+          <div class="stats-grid">
+            <article class="stat-card"><span class="stat-icon blue">◉</span><span class="stat-label">HOST AGENT</span><strong id="agent-stat">—</strong><small id="platform-stat">Waiting for status</small></article>
+            <article class="stat-card"><span class="stat-icon cyan">⌁</span><span class="stat-label">RELAY</span><strong id="relay-stat">Not set up</strong><small>Outbound secure connection</small></article>
+            <article class="stat-card"><span class="stat-icon violet">✓</span><span class="stat-label">PENDING APPROVALS</span><strong id="approval-stat">0</strong><small>Nothing runs without your OK</small></article>
+          </div>
+          <div class="section-heading"><div><p class="eyebrow">QUICK ACCESS</p><h2>Make it yours</h2></div></div>
+          <div class="quick-grid">
+            <button class="quick-card" data-open-section="pairing"><span class="quick-icon">⌘</span><strong>Connect your phone</strong><small>Scan a private pairing code</small><span class="quick-arrow">↗</span></button>
+            <button class="quick-card" data-open-section="settings"><span class="quick-icon">⚙</span><strong>Host settings</strong><small>Manage relay and agent tools</small><span class="quick-arrow">↗</span></button>
+            <button class="quick-card" data-open-section="logs"><span class="quick-icon">≋</span><strong>Watch activity</strong><small>Follow live host logs</small><span class="quick-arrow">↗</span></button>
+          </div>
+          <div class="section-heading"><div><p class="eyebrow">NEEDS YOUR ATTENTION</p><h2>Approval queue</h2></div><button class="text-button" data-open-section="approvals">View all →</button></div>
+          <div id="overview-tasks" class="task-list"></div>
+        </section>
+        <section class="page" id="section-approvals">
+          <div class="page-intro"><p>Remote coding-agent prompts are held here until you approve them on this Mac. No automatic agent execution.</p><span class="safe-badge">● LOCAL APPROVAL REQUIRED</span></div>
+          <div id="tasks" class="task-list"></div>
+        </section>
+        <section class="page" id="section-pairing">
+          <div class="page-intro"><p>Pair the Android app using your self-hosted HTTPS relay. The QR code is generated locally and never sent to a QR service.</p></div>
+          <div class="pairing-grid">
+            <article class="panel qr-panel"><div class="panel-top"><span class="panel-icon">⌘</span><div><h2>Connect your phone</h2><p>Scan with your Android camera</p></div></div><div id="qr-wrap" class="qr-wrap"><span class="empty-qr">Configure a relay and phone token in Settings to generate a QR code.</span></div><button id="copy-pairing" class="secondary-button" disabled>Copy pairing link</button><p class="fine-print">The phone token is a secret. Only scan this code into your own MacRemote app.</p></article>
+            <article class="panel steps-panel"><p class="eyebrow">THREE QUICK STEPS</p><div class="step"><b>01</b><div><strong>Run your relay</strong><p>Use a trusted server with HTTPS enabled.</p></div></div><div class="step"><b>02</b><div><strong>Add pairing details</strong><p>Enter relay URL, host ID, and phone token in Settings.</p></div></div><div class="step"><b>03</b><div><strong>Scan to connect</strong><p>Open the QR code using the MacRemote Android app.</p></div></div><div class="warning-note">Relay operators can read prompts, screenshots, and results. Choose infrastructure you trust.</div></article>
+          </div>
+        </section>
+        <section class="page" id="section-settings">
+          <div class="page-intro"><p>Settings are stored in your MacRemote config file. Secret values are only served to this authenticated, local browser.</p></div>
+          <form id="settings-form" class="settings-grid">
+            <article class="panel settings-panel"><p class="eyebrow">PHONE CONNECTION</p><label>Relay URL<input name="relay_url" type="url" placeholder="https://relay.example.com" autocomplete="off"></label><label>Host ID<input name="relay_host_id" autocomplete="off"></label><label>Host token<input name="relay_host_token" type="password" autocomplete="new-password"></label><label>Phone token<input name="relay_phone_token" type="password" autocomplete="new-password"></label></article>
+            <article class="panel settings-panel"><p class="eyebrow">HOST AGENT</p><label>Working directory<input name="working_directory" autocomplete="off"></label><label>Claude Code path<input name="claude_bin" autocomplete="off"></label><label>Antigravity path<input name="antigravity_bin" autocomplete="off"></label><label>Telegram bot token<input name="bot_token" type="password" autocomplete="new-password"></label><label>Allowed Telegram user IDs<input name="allowed_user_ids" placeholder="12345, 67890" autocomplete="off"></label><label class="toggle-label"><span>Keep Mac awake while connected to power<small>Uses the agent's existing keep-awake option.</small></span><input name="keep_awake" type="checkbox"></label></article>
+            <div class="settings-actions"><span>Agent tasks always wait for your local approval.</span><button class="primary-button" type="submit">Save settings</button></div>
+          </form>
+        </section>
+        <section class="page" id="section-logs">
+          <div class="page-intro"><p>Live service and host output. Agent prompts and their results are handled by your host agent.</p><span class="safe-badge"><span class="pulse"></span> LIVE</span></div>
+          <pre id="log-output" class="log-output" aria-live="polite"></pre>
+        </section>
+        <footer class="footer"><span>MacRemote · Private by design</span><span>Loopback only · No remote shell access</span></footer>
+      </main>
+    </div>
+  </body>
+</html>

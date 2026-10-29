@@ -1,18 +1,20 @@
-# 🚀 MacRemote — Phone Control for Mac and Windows
+# 🚀 MacRemote — Terminal-first host control for macOS
 
-[![macOS](https://img.shields.io/badge/macOS-Apple%20Silicon%20(M1/M6)-black?logo=apple&style=for-the-badge)](https://apple.com)
+[![macOS](https://img.shields.io/badge/macOS-CLI%20%2B%20local%20dashboard-black?logo=apple&style=for-the-badge)](https://apple.com)
 [![Python](https://img.shields.io/badge/Python-3.9%2B-blue?logo=python&style=for-the-badge)](https://python.org)
 [![Telegram](https://img.shields.io/badge/Control-Telegram%20Bot%20API-0088cc?logo=telegram&style=for-the-badge)](https://telegram.org)
 [![Antigravity](https://img.shields.io/badge/Agent-Google%20Antigravity%20AI-purple?style=for-the-badge)](https://antigravity.google)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
 
-> MacRemote combines native Mac and Windows host-app previews with phone controls. The Android companion and relay are buildable previews; Windows runtime testing and signed public releases are still outstanding.
+> MacRemote gives you a macOS terminal controller, a private local dashboard, and an Android companion for a self-hosted relay. Optional native Mac and Windows app previews are still available.
 
 ---
 
 ## ⚡ Key Highlights
 
 - 🖥️ **Desktop host apps:** SwiftUI menu-bar app for macOS and a window/tray app for Windows.
+- ⌨️ **Terminal-first Mac host:** Start, stop, inspect, and follow the host from `macremote`; no downloaded `.app` bundle required.
+- 🌌 **Private local dashboard:** Pair a phone, manage host settings, review approvals, and watch logs on loopback.
 - 📱 **Phone controls:** Existing Telegram bot flow plus a native Android companion connected through a self-hosted relay.
 - 🤖 **Coding-agent requests:** Submit Antigravity or Claude Code tasks; each waits for approval at the host before execution.
 - 🔐 **Restricted remote actions:** Built-in allowlist only; arbitrary remote shell execution is disabled.
@@ -21,7 +23,40 @@
 
 ---
 
-## 🖥️ Native macOS App Preview
+## ⌨️ Recommended: terminal app and local dashboard
+
+Install the Mac CLI with Homebrew:
+
+```bash
+brew tap ard-tube/mac-remote-agent https://github.com/ard-tube/mac-remote-agent
+brew install macremote
+```
+
+Or use the one-line installer:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ard-tube/mac-remote-agent/main/install.sh | sh
+```
+
+Then start MacRemote and open its local dashboard:
+
+```bash
+macremote start
+```
+
+The dashboard is bound to `127.0.0.1`, requires a private local token, and uses no third-party QR service. Add your self-hosted HTTPS relay details in **Settings**, then scan the locally generated pairing code with the Android app. Incoming coding-agent prompts remain pending until you explicitly approve them on the Mac; remote shell execution is disabled.
+
+```bash
+macremote status     # Host, daemon, relay, and dashboard status
+macremote ui         # Open the dashboard
+macremote pairing    # Print the Android pairing QR in the terminal
+macremote logs -f    # Follow daemon and host logs
+macremote stop       # Stop the dashboard and host agent
+```
+
+The CLI avoids launching the Gatekeeper-blocked preview bundle. It does **not** make the optional native app Developer ID signed or notarized. `qrencode` is needed for QR display in the terminal; Homebrew installs it with the formula. Install it separately (`brew install qrencode`) for the standalone installer.
+
+## 🖥️ Optional native macOS app preview
 
 The macOS menu-bar app provides Telegram and relay settings, task review, local approval, and an activity log. Build it on macOS 13 or later with Swift 5.9+ and Python 3 installed:
 
@@ -50,9 +85,9 @@ Run the relay on infrastructure you control, configure an HTTPS reverse proxy, a
 
 ---
 
-## 🧰 Optional CLI utilities
+## 🧰 Legacy `mra` CLI utilities
 
-The desktop apps are the user-facing host interface. The repository also retains the original optional `mra` CLI helpers for development and existing installations.
+The older `mra` helpers remain available for existing installations and repository development. New installs should use `macremote`.
 
 Type `mra` in any terminal window to access the agent controller:
 
@@ -92,25 +127,25 @@ Remote shell commands are disabled. Unrecognized plain-text messages are not exe
 
 ## ⚡ 2-Minute Setup
 
-### 1. Create a Bot on Telegram
+### 1. Install the Mac host
+
+Use the Homebrew or one-line installer above. `macremote start` opens the local dashboard. If you also use Telegram, continue with the optional bot setup below.
+
+### 2. Create a Bot on Telegram (optional)
 1. On your phone, open Telegram and message `@BotFather`.
 2. Send `/newbot`, name your bot (e.g. `MyMacBookBot`), and copy the **API Token**.
 
-### 2. Run Setup on your Mac
+### 3. Configure and pair your phone
+
+Run your self-hosted relay behind HTTPS and provision the host ID, host token, and phone token using [`relay/README.md`](relay/README.md). Enter them in **Settings** in the local dashboard, save, then open **Pair phone** and scan the QR code. The Android app imports the relay URL, host ID, and phone token; review them and tap **Save connection** to store them encrypted with Android Keystore.
+
+For legacy repository-based setup only:
+
 ```bash
 git clone https://github.com/ard-tube/mac-remote-agent.git ~/mac-remote-agent
 cd ~/mac-remote-agent
-./setup.sh
+./install.sh --legacy
 ```
-Enter your Bot Token when prompted.
-
-### 3. Pair your Phone
-1. Open your bot in Telegram on your phone and tap **Start**.
-2. Tap or send the pairing command:
-   ```text
-   /pair <PIN>
-   ```
-   *(Your PIN is shown in terminal or by running `mra pin`).*
 
 ---
 
@@ -130,21 +165,21 @@ sudo pmset -a disablesleep 1
 
 ## 🔄 Run Automatically 24/7 in Background
 
-Install the persistent macOS LaunchAgent service:
+Run the host and dashboard in the background:
 ```bash
-mra service install
+macremote daemon
 ```
-To stop or check status:
+To stop or inspect:
 ```bash
-mra status
-mra stop
+macremote status
+macremote stop
 ```
 
 ## 🌐 Website deployment
 
 The `Deploy GitHub Pages` workflow publishes the static site in `docs/` to GitHub Pages when changes are pushed to `main`. Enable GitHub Pages with **GitHub Actions** as the repository's deployment source in repository settings.
 
-Pushing a `v*` tag runs the cross-platform build workflow and publishes a GitHub prerelease with the Mac, Windows, and Android preview artifacts. These are not signed production releases; shipping signed installers requires platform signing credentials and a production Android signing key.
+Pushing a `v*` tag runs the cross-platform build workflow and publishes the CLI archive, Mac and Windows app previews, and Android debug APK. The optional native apps remain unsigned or ad-hoc signed previews, and the APK is not a signed production build. A CLI install does not require the native Mac bundle.
 
 ---
 

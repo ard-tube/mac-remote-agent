@@ -2,6 +2,7 @@ package com.ardtube.macremote
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.content.Intent
 import android.os.Bundle
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
@@ -97,6 +98,7 @@ import org.json.JSONObject
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URI
+import java.net.URLDecoder
 import java.net.URL
 import java.nio.charset.StandardCharsets
 import java.security.KeyStore
@@ -106,8 +108,11 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 class MainActivity : ComponentActivity() {
+    private var pairingLink by mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        pairingLink = intent?.dataString
         enableEdgeToEdge(
             statusBarStyle = androidx.activity.SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
             navigationBarStyle = androidx.activity.SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
@@ -116,10 +121,16 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme(colorScheme = MacRemoteColorScheme) {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    RelayScreen(securePreferences)
+                    RelayScreen(securePreferences, pairingLink)
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        pairingLink = intent.dataString
     }
 }
 
@@ -226,7 +237,7 @@ private class SecurePreferences(context: android.content.Context) {
 }
 
 @Composable
-private fun RelayScreen(securePreferences: SecurePreferences) {
+private fun RelayScreen(securePreferences: SecurePreferences, pairingLink: String?) {
     var settings by remember { mutableStateOf(RelaySettings()) }
     var relayUrl by remember { mutableStateOf("") }
     var hostId by remember { mutableStateOf("") }
@@ -258,6 +269,23 @@ private fun RelayScreen(securePreferences: SecurePreferences) {
             errorMessage = error.message ?: "Could not decrypt saved connection settings."
         } finally {
             settingsLoaded = true
+        }
+    }
+
+    LaunchedEffect(settingsLoaded, pairingLink) {
+        if (!settingsLoaded || pairingLink.isNullOrBlank()) return@LaunchedEffect
+        try {
+            val imported = parsePairingLink(pairingLink)
+            relayUrl = imported.relayUrl
+            hostId = imported.hostId
+            phoneToken = imported.phoneToken
+            selectedSection = AppSection.SETTINGS
+            connectionStatus = "Pairing imported · save to connect"
+            errorMessage = null
+        } catch (error: IllegalArgumentException) {
+            errorMessage = error.message ?: "The pairing link is invalid."
+        } catch (error: java.net.URISyntaxException) {
+            errorMessage = "The pairing link is invalid."
         }
     }
 
@@ -430,6 +458,28 @@ private fun RelayScreen(securePreferences: SecurePreferences) {
             }
         }
     }
+}
+
+private fun parsePairingLink(raw: String): RelaySettings {
+    val uri = URI(raw)
+    require(uri.scheme == "macremote" && uri.host == "pair" && uri.rawUserInfo == null) {
+        "This is not a MacRemote pairing link."
+    }
+    val values = uri.rawQuery.orEmpty()
+        .split('&')
+        .filter(String::isNotBlank)
+        .associate { item ->
+            val parts = item.split('=', limit = 2)
+            URLDecoder.decode(parts[0], StandardCharsets.UTF_8.name()) to
+                URLDecoder.decode(parts.getOrElse(1) { "" }, StandardCharsets.UTF_8.name())
+        }
+    val settings = RelaySettings(
+        relayUrl = values["relay_url"].orEmpty(),
+        hostId = values["host_id"].orEmpty(),
+        phoneToken = values["phone_token"].orEmpty(),
+    )
+    RelayApi.validate(settings)
+    return settings
 }
 
 @Composable
@@ -902,6 +952,7 @@ private object RelayApi {
         require(uri.scheme?.equals("https", ignoreCase = true) == true && !uri.host.isNullOrBlank()) {
             "The relay URL must use HTTPS."
         }
+        require(uri.port == -1 || uri.port in 1..65535) { "The relay port is invalid." }
         require(uri.userInfo == null && uri.query == null && uri.fragment == null && uri.path.orEmpty() in listOf("", "/")) {
             "Enter only the relay origin, without a path, query, or credentials."
         }
