@@ -28,7 +28,7 @@
 Install and open the Mac host dashboard in one command with Homebrew:
 
 ```bash
-brew install ard-tube/mac-remote-agent/macremote && macremote start
+brew update && brew install --force ard-tube/mac-remote-agent/macremote && macremote start
 ```
 
 Or use the standalone installer:
