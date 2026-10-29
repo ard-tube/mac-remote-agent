@@ -1,0 +1,88 @@
+name: Build desktop app previews
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "agent.py"
+      - "macos/**"
+      - "windows/**"
+      - "android/**"
+      - "relay/**"
+      - "tests/**"
+      - ".github/workflows/desktop-build.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  relay:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Test relay
+        run: npm --prefix relay test
+      - name: Check website JavaScript
+        run: node --check docs/app.js
+
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Test host agent
+        run: python -m unittest discover -s tests -v
+      - name: Build app bundle
+        run: |
+          swift build --package-path macos --configuration release
+          bash macos/build-app.sh
+          ditto -c -k --sequesterRsrc --keepParent dist/MacRemote.app dist/MacRemote-macOS.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macremote-macos-unsigned
+          path: dist/MacRemote-macOS.zip
+          if-no-files-found: error
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Test host agent
+        run: python -m unittest discover -s tests -v
+      - name: Build app package
+        shell: pwsh
+        run: ./windows/build-app.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macremote-windows-unsigned
+          path: dist/MacRemote-Windows.zip
+          if-no-files-found: error
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - name: Build Android APK
+        run: gradle --no-daemon :app:assembleDebug
+        working-directory: android
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macremote-android-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error

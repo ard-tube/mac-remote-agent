@@ -23,6 +23,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Check website JavaScript
+        run: node --check docs/app.js
       - name: Setup Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact

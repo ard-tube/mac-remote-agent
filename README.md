@@ -1,4 +1,4 @@
-# 🚀 MacRemote — Universal Remote Control for Apple Silicon Macs
+# 🚀 MacRemote — Phone Control for Mac and Windows
 
 [![macOS](https://img.shields.io/badge/macOS-Apple%20Silicon%20(M1%2FM2%2FM3%2FM4)-black?logo=apple&style=for-the-badge)](https://apple.com)
 [![Python](https://img.shields.io/badge/Python-3.9%2B-blue?logo=python&style=for-the-badge)](https://python.org)
@@ -6,32 +6,53 @@
 [![Antigravity](https://img.shields.io/badge/Agent-Google%20Antigravity%20AI-purple?style=for-the-badge)](https://antigravity.google)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
 
-> Control any **Apple Silicon Mac (M1, M2, M3, M4 / Air, Pro, Mini, Studio)** from your **phone** anytime, anywhere via Telegram.
-> Featuring instant Retina screenshots, Finder automation, Google Drive syncing, and full **Google Antigravity AI** integration.
+> MacRemote combines native Mac and Windows host-app previews with phone controls. The Android companion and relay are buildable previews; Windows runtime testing and signed public releases are still outstanding.
 
 ---
 
 ## ⚡ Key Highlights
 
-- 🍏 **Universal M-Series Support:** Engineered for all Apple Silicon Macs:
-  - **M1 Series:** M1, M1 Pro, M1 Max, M1 Ultra (MacBook Air, MacBook Pro, Mac mini, iMac, Mac Studio)
-  - **M2 Series:** M2, M2 Pro, M2 Max, M2 Ultra (MacBook Air 13"/15", MacBook Pro 14"/16", Mac mini, Mac Studio, Mac Pro)
-  - **M3 Series:** M3, M3 Pro, M3 Max (MacBook Air 13"/15", MacBook Pro 14"/16", iMac)
-  - **M4 Series:** M4, M4 Pro, M4 Max (MacBook Pro, Mac mini, iMac)
-- 💻 **Instant `mra` CLI Access:** Control, start, stop, monitor, or view live logs from anywhere by typing `mra` in Terminal.
-- 📱 **Telegram Bot Commands Menu:** All commands automatically registered and visible on your phone in the Telegram **Menu** button.
-- 📸 **Retina Screenshot Streaming:** Wakes screen buffer and captures high-res display shots in ~2 seconds.
-- 📂 **Remote Finder Navigation:** Open any directory, view files, or reveal specific files in Finder.
-- 💾 **Google Drive Auto-Sync:** 1-command copying to Google Drive (`Remote_Shared`) with instant mobile sync.
-- 📥 **Direct Telegram File Transfer:** Request any file from your Mac and have it delivered directly into your Telegram chat.
-- 🤖 **Antigravity AI Agent Bridge:** Delegate coding, debugging, or complex automation tasks to Antigravity CLI directly from your phone.
-- 🔌 **Smart Clamshell Keep-Awake:** Prevents sleep while plugged into AC power even with lid closed.
-- 🔒 **End-to-End Pairing Security:** PIN-protected pairing ensures only your authorized phone can command your Mac.
-- 🛡️ **Clean Lifecycle & Conflict Protection:** OS-level singleton locking prevents duplicate instance conflicts (HTTP 409), and clean signal handling ensures all subshells and caffeinate processes shut down properly.
+- 🖥️ **Desktop host apps:** SwiftUI menu-bar app for macOS and a window/tray app for Windows.
+- 📱 **Phone controls:** Existing Telegram bot flow plus a native Android companion connected through a self-hosted relay.
+- 🤖 **Coding-agent requests:** Submit Antigravity or Claude Code tasks; each waits for approval at the host before execution.
+- 🔐 **Restricted remote actions:** Built-in allowlist only; arbitrary remote shell execution is disabled.
+- 🌐 **Outbound host connection:** Host polls the relay over HTTPS; no inbound router port is required.
+- ⚠️ **Relay trust model:** TLS protects traffic in transit, but the relay is not end-to-end encrypted and can read prompts, screenshots, and results.
 
 ---
 
-## 💻 Quick Terminal Access: `mra`
+## 🖥️ Native macOS App Preview
+
+The macOS menu-bar app provides Telegram and relay settings, task review, local approval, and an activity log. Build it on macOS 13 or later with Swift 5.9+ and Python 3 installed:
+
+```bash
+./macos/build-app.sh
+open dist/MacRemote.app
+```
+
+In the app, enter your Telegram bot token, optional Antigravity and Claude Code executable paths, and the folder the agents should work in. Configure the relay URL, host ID, and host token only if using relay control. Configuration is stored under `~/Library/Application Support/MacRemote`. The app bundle is an unsigned development build.
+
+## 🪟 Windows Host App Preview
+
+The Windows app source includes a native window and system-tray controls. Build it on a Windows machine with Python 3.9 or later and PowerShell:
+
+```powershell
+.\windows\build-app.ps1
+```
+
+The script packages a Windows app folder and `dist\MacRemote-Windows.zip`. The Windows build and runtime still need verification on a Windows machine before distribution.
+
+## 📲 Android companion and relay preview
+
+The Android source is under `android/`. The desktop build workflow creates an installable debug APK as an artifact; it is not a signed production release. The app accepts an HTTPS relay URL plus a host ID and phone token, and stores the connection settings encrypted with Android Keystore.
+
+Run the relay on infrastructure you control, configure an HTTPS reverse proxy, and provision a host using the instructions in [`relay/README.md`](relay/README.md). Enter the host token in the desktop app and the phone token in Android. **Do not expose the relay's HTTP listener directly to the internet.** The relay operator can read command prompts, screenshots, and results.
+
+---
+
+## 🧰 Optional CLI utilities
+
+The desktop apps are the user-facing host interface. The repository also retains the original optional `mra` CLI helpers for development and existing installations.
 
 Type `mra` in any terminal window to access the agent controller:
 
@@ -59,18 +80,13 @@ Tap the blue **Menu** button in Telegram or tap the persistent keyboard buttons:
 | `📂 Open Finder` or `/finder` | Opens Finder window and lists top files | `/finder ~/Downloads` |
 | `💾 Google Drive` or `/drive` | Copies file to Google Drive sync folder | `/drive report.pdf` |
 | `/get` or `/file` | Sends the file directly to your phone via Telegram | `/get ~/Desktop/notes.txt` |
-| `🤖 Antigravity AI` or `/agy` | Runs Antigravity AI prompt on your Mac | `/agy organize my desktop files` |
+| `🤖 Antigravity AI` or `/agy <prompt>` | Shows instructions or queues an Antigravity task for local host approval | `/agy summarize recent commits` |
+| `🧠 Claude Code` or `/claude <prompt>` | Shows instructions or queues a Claude Code task for local host approval | `/claude review this project` |
 | `🔋 Status` or `/status` | Shows battery %, AC power, disk space, and uptime | `/status` |
 | `🔒 Lock Screen` or `/lock` | Locks your Mac screen and puts display to sleep | `/lock` |
-| `/sh <command>` | Executes bash/zsh shell command | `/sh git status` |
 | `/help` | Displays command list and usage guide | `/help` |
 
-### 💬 Natural Language Support
-You can also send natural language requests in plain text:
-- *"take a screenshot"*
-- *"open finder ~/Downloads"*
-- *"share report.pdf on drive"*
-- Unrecognized or complex requests are automatically routed to **Google Antigravity AI**!
+Remote shell commands are disabled. Unrecognized plain-text messages are not executed; use an explicit built-in command or submit a coding-agent prompt. Requests are stored locally and appear in the Mac menu-bar app for review before execution.
 
 ---
 
@@ -123,6 +139,12 @@ To stop or check status:
 mra status
 mra stop
 ```
+
+## 🌐 Website deployment
+
+The `Deploy GitHub Pages` workflow publishes the static site in `docs/` to GitHub Pages when changes are pushed to `main`. Enable GitHub Pages with **GitHub Actions** as the repository's deployment source in repository settings.
+
+Pushing a `v*` tag runs the cross-platform build workflow and publishes a GitHub prerelease with the Mac, Windows, and Android preview artifacts. These are not signed production releases; shipping signed installers requires platform signing credentials and a production Android signing key.
 
 ---
 

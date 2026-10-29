@@ -5,24 +5,34 @@ Universal support for all Apple M-Series Macs (M1, M2, M3, M4, Air, Pro, Max, Ul
 Features Antigravity AI integration, Google Drive syncing, and complete macOS automation.
 """
 
+import base64
 import os
 import sys
 import json
 import time
 import uuid
 import glob
-import fcntl
 import signal
 import socket
 import atexit
 import shutil
 import logging
+import secrets
 import datetime
+import platform
+import sqlite3
+import tempfile
 import subprocess
 import threading
+from contextlib import closing
 import urllib.request
 import urllib.parse
 import urllib.error
+
+if os.name == "nt":
+    import msvcrt
+else:
+    import fcntl
 
 # Setup Logging
 logging.basicConfig(
@@ -33,8 +43,18 @@ logging.basicConfig(
 logger = logging.getLogger("MacRemoteAgent")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
-TMP_DIR = "/tmp/mac_remote"
+if os.environ.get("MRA_DATA_DIR"):
+    DATA_DIR = os.path.expanduser(os.environ["MRA_DATA_DIR"])
+elif os.name == "nt":
+    DATA_DIR = os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "MacRemote")
+elif sys.platform == "darwin":
+    DATA_DIR = os.path.expanduser("~/Library/Application Support/MacRemote")
+else:
+    DATA_DIR = os.path.join(os.environ.get("XDG_DATA_HOME", os.path.expanduser("~/.local/share")), "mac-remote")
+CONFIG_FILE = os.path.join(DATA_DIR, "config.json")
+LEGACY_CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
+TASK_DB_FILE = os.path.join(DATA_DIR, "pending_tasks.sqlite3")
+TMP_DIR = os.path.join(tempfile.gettempdir(), "mac_remote")
 os.makedirs(TMP_DIR, exist_ok=True)
 LOCK_FILE = os.path.join(TMP_DIR, "mac_remote_agent.lock")
 PID_FILE = os.path.join(BASE_DIR, "agent.pid")
@@ -45,23 +65,39 @@ DEFAULT_CONFIG = {
     "pairing_pin": "",
     "google_drive_path": os.path.expanduser("~/Google Drive/My Drive"),
     "antigravity_bin": os.path.expanduser("~/.local/bin/agy"),
+    "claude_bin": "",
+    "working_directory": os.path.expanduser("~"),
+    "relay_url": "",
+    "relay_host_id": "",
+    "relay_host_token": "",
     "keep_awake": True
 }
 
 lock_file_handle = None
 keep_awake_instance = None
+active_cli_process = None
+active_cli_process_lock = threading.Lock()
+shutdown_event = threading.Event()
 
 
 def acquire_instance_lock():
-    """Ensures only a single instance of MacRemote Agent runs to prevent 409 Conflict."""
+    """Ensures only a single instance of MacRemote Agent runs."""
     global lock_file_handle
     try:
         lock_file_handle = open(LOCK_FILE, "a+")
-        fcntl.flock(lock_file_handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        if os.name == "nt":
+            lock_file_handle.seek(0)
+            if not lock_file_handle.read(1):
+                lock_file_handle.write("\0")
+                lock_file_handle.flush()
+            lock_file_handle.seek(0)
+            msvcrt.locking(lock_file_handle.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            fcntl.flock(lock_file_handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
         with open(PID_FILE, "w") as pf:
             pf.write(str(os.getpid()))
         return True
-    except (IOError, BlockingIOError):
+    except (IOError, OSError, BlockingIOError):
         existing_pid = None
         if os.path.exists(PID_FILE):
             try:
@@ -78,8 +114,9 @@ def acquire_instance_lock():
 
 
 def cleanup_handler(signum=None, frame=None):
-    """Cleanly terminates child processes, caffeinate assertions, and releases locks."""
+    """Cleanly terminates child processes and releases the instance lock."""
     global keep_awake_instance, lock_file_handle
+    shutdown_event.set()
     if keep_awake_instance:
         try:
             keep_awake_instance.stop()
@@ -87,11 +124,21 @@ def cleanup_handler(signum=None, frame=None):
             pass
         keep_awake_instance = None
 
-    # Kill any orphaned caffeinate child processes
-    try:
-        subprocess.run(["pkill", "-f", "caffeinate -s -i -m"], capture_output=True, timeout=2)
-    except Exception:
-        pass
+    with active_cli_process_lock:
+        cli_process = active_cli_process
+        if cli_process and cli_process.poll() is None:
+            try:
+                cli_process.terminate()
+            except OSError:
+                logger.exception("Could not stop the active coding-agent process")
+    if cli_process and cli_process.poll() is None:
+        try:
+            cli_process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            try:
+                cli_process.kill()
+            except OSError:
+                logger.exception("Could not kill the active coding-agent process")
 
     if os.path.exists(PID_FILE):
         try:
@@ -101,7 +148,11 @@ def cleanup_handler(signum=None, frame=None):
 
     if lock_file_handle:
         try:
-            fcntl.flock(lock_file_handle, fcntl.LOCK_UN)
+            if os.name == "nt":
+                lock_file_handle.seek(0)
+                msvcrt.locking(lock_file_handle.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                fcntl.flock(lock_file_handle, fcntl.LOCK_UN)
             lock_file_handle.close()
         except Exception:
             pass
@@ -117,36 +168,49 @@ signal.signal(signal.SIGINT, cleanup_handler)
 signal.signal(signal.SIGTERM, cleanup_handler)
 # If started with nohup/daemon, SIGHUP is SIG_IGN - keep it ignored so agent stays alive.
 # If started interactively in a terminal, trap SIGHUP to cleanly shut down child shells when terminal closes.
-if signal.getsignal(signal.SIGHUP) != signal.SIG_IGN:
+if hasattr(signal, "SIGHUP") and signal.getsignal(signal.SIGHUP) != signal.SIG_IGN:
     signal.signal(signal.SIGHUP, cleanup_handler)
 atexit.register(cleanup_handler)
 
 
 def load_config():
-    if os.path.exists(CONFIG_FILE):
+    config_path = CONFIG_FILE if os.path.exists(CONFIG_FILE) else LEGACY_CONFIG_FILE
+    if os.path.exists(config_path):
         try:
-            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            with open(config_path, "r", encoding="utf-8") as f:
                 cfg = json.load(f)
                 merged = {**DEFAULT_CONFIG, **cfg}
                 return merged
-        except Exception as e:
-            logger.error(f"Error loading config.json: {e}")
+        except (OSError, TypeError, json.JSONDecodeError) as e:
+            raise RuntimeError(f"Unable to load configuration from {config_path}: {e}") from e
     # Generate random 4-digit PIN for first setup
     cfg = DEFAULT_CONFIG.copy()
-    cfg["pairing_pin"] = f"{int(time.time()) % 9000 + 1000}"
-    save_config(cfg)
+    cfg["pairing_pin"] = f"{secrets.randbelow(9000) + 1000}"
+    if not save_config(cfg):
+        raise RuntimeError(f"Unable to create configuration file at {CONFIG_FILE}.")
     return cfg
 
 
 def save_config(cfg):
+    temp_path = CONFIG_FILE + ".tmp"
     try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        os.makedirs(DATA_DIR, exist_ok=True)
+        with open(temp_path, "w", encoding="utf-8") as f:
+            if os.name != "nt":
+                os.chmod(temp_path, 0o600)
             json.dump(cfg, f, indent=2)
-    except Exception as e:
+        os.replace(temp_path, CONFIG_FILE)
+        return True
+    except (OSError, TypeError, ValueError) as e:
         logger.error(f"Error saving config.json: {e}")
+        try:
+            os.remove(temp_path)
+        except FileNotFoundError:
+            pass
+        return False
 
 
-config = load_config()
+config = DEFAULT_CONFIG.copy()
 
 
 class TelegramBot:
@@ -211,9 +275,9 @@ class TelegramBot:
             {"command": "finder", "description": "📂 Browse Finder files"},
             {"command": "drive", "description": "💾 Share file to Google Drive"},
             {"command": "get", "description": "📥 Download file directly to phone"},
-            {"command": "sh", "description": "⚙️ Run terminal shell command"},
             {"command": "agy", "description": "🤖 Run Antigravity AI prompt"},
-            {"command": "lock", "description": "🔒 Lock Mac display"},
+            {"command": "claude", "description": "🧠 Run Claude Code prompt"},
+            {"command": "lock", "description": "🔒 Lock computer"},
             {"command": "help", "description": "ℹ️ Show all available commands"}
         ]
         res = self.request("setMyCommands", {"commands": commands})
@@ -296,63 +360,144 @@ class TelegramBot:
         return self.request("sendDocument", data=data, files=files, timeout=120)
 
 
+class RelayClient:
+    """Authenticated outbound client for the optional MacRemote relay."""
+
+    def __init__(self, base_url, host_id, token):
+        parsed = urllib.parse.urlparse(base_url)
+        loopback = parsed.hostname in ("localhost", "127.0.0.1", "::1")
+        if parsed.scheme != "https" and not (parsed.scheme == "http" and loopback):
+            raise ValueError("Relay URL must use HTTPS (HTTP is allowed for localhost development only).")
+        if not parsed.netloc or parsed.username or parsed.password or parsed.query or parsed.fragment:
+            raise ValueError("Relay URL must be a base URL without credentials, query, or fragment.")
+        if not host_id or any(character not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-" for character in host_id):
+            raise ValueError("Relay host ID is invalid.")
+        if not token:
+            raise ValueError("Relay host token is required.")
+        self.base_url = base_url.rstrip("/")
+        self.host_id = host_id
+        self.token = token
+        self.commands_url = (
+            f"{self.base_url}/v1/hosts/{urllib.parse.quote(host_id, safe='')}/commands"
+        )
+
+    def request(self, url, method="GET", body=None, timeout=35):
+        data = json.dumps(body).encode("utf-8") if body is not None else None
+        headers = {"Authorization": f"Bearer {self.token}", "Accept": "application/json"}
+        if data is not None:
+            headers["Content-Type"] = "application/json"
+        request = urllib.request.Request(url, data=data, headers=headers, method=method)
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as error:
+            raise RuntimeError(f"Relay returned HTTP {error.code}.") from error
+        except (urllib.error.URLError, TimeoutError, socket.timeout) as error:
+            raise RuntimeError(f"Could not reach the MacRemote relay: {error}") from error
+
+    def poll_commands(self):
+        url = f"{self.commands_url}?wait=25"
+        result = self.request(url, timeout=35)
+        commands = result.get("commands")
+        if not isinstance(commands, list):
+            raise RuntimeError("Relay returned an invalid command response.")
+        return commands
+
+    def report_command(self, command_id, status, result):
+        url = f"{self.commands_url}/{urllib.parse.quote(command_id, safe='')}/result"
+        return self.request(url, method="POST", body={"status": status, "result": result})
+
+    def run_forever(self, bot):
+        while not shutdown_event.is_set():
+            try:
+                for command in self.poll_commands():
+                    if shutdown_event.is_set():
+                        return
+                    handle_relay_command(self, bot, command)
+            except Exception:
+                logger.exception("Relay polling failed")
+                shutdown_event.wait(5)
+
+
 def get_main_keyboard():
     return {
         "keyboard": [
             [{"text": "📸 Screenshot"}, {"text": "🔋 Status"}],
             [{"text": "📂 Open Finder"}, {"text": "💾 Google Drive"}],
-            [{"text": "🤖 Antigravity AI"}, {"text": "🔒 Lock Screen"}]
+            [{"text": "🤖 Antigravity AI"}, {"text": "🧠 Claude Code"}],
+            [{"text": "🔒 Lock Screen"}]
         ],
         "resize_keyboard": True,
         "persistent": True
     }
 
 
-def get_mac_model_info():
-    """Dynamically detects Mac model and Apple Silicon chip (M1, M2, M3, M4, etc.)."""
-    chip = "Apple Silicon"
-    model = "Mac"
-    try:
-        res = subprocess.run(["sysctl", "-n", "machdep.cpu.brand_string"], capture_output=True, text=True, timeout=2)
-        if res.stdout.strip():
-            chip = res.stdout.strip()
-    except Exception:
-        pass
+def get_host_model_info():
+    """Returns a human-readable name for the machine running the agent."""
+    if sys.platform == "darwin":
+        chip = "Apple Silicon"
+        model = "Mac"
+        try:
+            res = subprocess.run(["sysctl", "-n", "machdep.cpu.brand_string"], capture_output=True, text=True, timeout=2)
+            if res.stdout.strip():
+                chip = res.stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            pass
 
-    try:
-        res = subprocess.run(["system_profiler", "SPHardwareDataType"], capture_output=True, text=True, timeout=3)
-        for line in res.stdout.split("\n"):
-            if "Model Name:" in line:
-                model = line.split(":", 1)[1].strip()
-                break
-    except Exception:
-        pass
+        try:
+            res = subprocess.run(["system_profiler", "SPHardwareDataType"], capture_output=True, text=True, timeout=3)
+            for line in res.stdout.split("\n"):
+                if "Model Name:" in line:
+                    model = line.split(":", 1)[1].strip()
+                    break
+        except (OSError, subprocess.SubprocessError):
+            pass
+        return f"{model} ({chip})"
 
-    return f"{model} ({chip})"
+    return f"{platform.node() or 'Computer'} ({platform.system()} {platform.machine()})"
 
 
 class SystemActions:
-    """macOS local automation methods."""
+    """Local automation methods for the supported host operating systems."""
 
     @staticmethod
     def take_screenshot():
-        """Wakes screen buffer and captures a JPEG screenshot."""
+        """Captures a screenshot using the host operating system."""
         out_path = os.path.join(TMP_DIR, f"ss_{int(time.time())}.jpg")
         try:
-            # Wake display assertion for 2 seconds to ensure frame buffer is updated
-            subprocess.run(["caffeinate", "-u", "-t", "2"], timeout=3)
-            # Capture display as JPEG
-            res = subprocess.run(
-                ["screencapture", "-x", "-t", "jpg", out_path],
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
+            if sys.platform == "darwin":
+                subprocess.run(["caffeinate", "-u", "-t", "2"], timeout=3)
+                res = subprocess.run(
+                    ["screencapture", "-x", "-t", "jpg", out_path],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+            elif os.name == "nt":
+                escaped_path = out_path.replace("'", "''")
+                script = (
+                    "Add-Type -AssemblyName System.Windows.Forms; "
+                    "Add-Type -AssemblyName System.Drawing; "
+                    "$s=[System.Windows.Forms.SystemInformation]::VirtualScreen; "
+                    "$b=New-Object System.Drawing.Bitmap($s.Width,$s.Height); "
+                    "$g=[System.Drawing.Graphics]::FromImage($b); "
+                    "$g.CopyFromScreen($s.X,$s.Y,0,0,$b.Size); "
+                    f"$b.Save('{escaped_path}',[System.Drawing.Imaging.ImageFormat]::Jpeg); "
+                    "$g.Dispose(); $b.Dispose()"
+                )
+                res = subprocess.run(
+                    ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script],
+                    capture_output=True,
+                    text=True,
+                    timeout=15
+                )
+            else:
+                return None, f"Screenshot is not supported on {platform.system()}."
             if res.returncode == 0 and os.path.exists(out_path):
                 return out_path, None
             else:
                 return None, f"Screenshot error: {res.stderr}"
-        except Exception as e:
+        except (OSError, subprocess.SubprocessError) as e:
             return None, str(e)
 
     @staticmethod
@@ -367,8 +512,13 @@ class SystemActions:
             return f"❌ Path does not exist: `{target_path}`"
 
         try:
-            subprocess.run(["open", target_path], check=True, timeout=5)
-            subprocess.run(["osascript", "-e", 'tell application "Finder" to activate'], timeout=5)
+            if sys.platform == "darwin":
+                subprocess.run(["open", target_path], check=True, timeout=5)
+                subprocess.run(["osascript", "-e", 'tell application "Finder" to activate'], timeout=5)
+            elif os.name == "nt":
+                os.startfile(target_path)
+            else:
+                return f"Opening folders is not supported on {platform.system()}."
 
             items = os.listdir(target_path)
             item_list = []
@@ -380,11 +530,11 @@ class SystemActions:
 
             listing = "\n".join(item_list) if item_list else "_Folder is empty._"
             return (
-                f"📂 *Opened Finder in:*\n`{target_path}`\n\n"
+                f"📂 *Opened folder:*\n`{target_path}`\n\n"
                 f"*Contents (top {len(item_list)}):*\n{listing}\n\n"
                 f"💡 _Tip: Reply with `/drive <filename>` or `/get <filename>` to share or download._"
             )
-        except Exception as e:
+        except (OSError, subprocess.SubprocessError) as e:
             return f"❌ Error opening Finder: {str(e)}"
 
     @staticmethod
@@ -426,39 +576,71 @@ class SystemActions:
 
     @staticmethod
     def get_system_status():
-        """Gathers battery, power adapter, disk, CPU, and uptime status for any M-series Mac."""
-        mac_name = get_mac_model_info()
-        lines = [f"💻 *{mac_name} Status*\n"]
+        """Gathers portable power, disk, and uptime information."""
+        host_name = get_host_model_info()
+        lines = [f"💻 *{host_name} Status*\n"]
 
-        # Battery / AC power
-        try:
-            batt_res = subprocess.run(["pmset", "-g", "batt"], capture_output=True, text=True, timeout=3)
-            batt_out = batt_res.stdout
-            is_ac = "AC Power" in batt_out
-            power_source = "🔌 Plugged into AC Power" if is_ac else "🔋 Running on Battery"
-            lines.append(f"*Power:* {power_source}")
-            for part in batt_out.split(";"):
-                if "%" in part:
-                    lines.append(f"*Battery Level:* `{part.strip()}`")
-                    break
-        except Exception:
-            lines.append("*Power:* Unknown")
+        if sys.platform == "darwin":
+            try:
+                batt_res = subprocess.run(["pmset", "-g", "batt"], capture_output=True, text=True, timeout=3)
+                batt_out = batt_res.stdout
+                is_ac = "AC Power" in batt_out
+                power_source = "🔌 Plugged into AC Power" if is_ac else "🔋 Running on Battery"
+                lines.append(f"*Power:* {power_source}")
+                for part in batt_out.split(";"):
+                    if "%" in part:
+                        lines.append(f"*Battery Level:* `{part.strip()}`")
+                        break
+            except (OSError, subprocess.SubprocessError):
+                lines.append("*Power:* Unknown")
+        elif os.name == "nt":
+            try:
+                import ctypes
 
-        # Disk space
-        try:
-            df_res = subprocess.run(["df", "-h", "/"], capture_output=True, text=True, timeout=3)
-            df_lines = df_res.stdout.strip().split("\n")
-            if len(df_lines) > 1:
-                parts = df_lines[1].split()
-                lines.append(f"*Disk (Macintosh HD):* `{parts[3]} free` of `{parts[1]}` ({parts[4]} used)")
-        except Exception:
-            pass
+                class SystemPowerStatus(ctypes.Structure):
+                    _fields_ = [
+                        ("ACLineStatus", ctypes.c_byte),
+                        ("BatteryFlag", ctypes.c_byte),
+                        ("BatteryLifePercent", ctypes.c_byte),
+                        ("Reserved1", ctypes.c_byte),
+                        ("BatteryLifeTime", ctypes.c_ulong),
+                        ("BatteryFullLifeTime", ctypes.c_ulong),
+                    ]
 
-        # Uptime
+                power = SystemPowerStatus()
+                if ctypes.windll.kernel32.GetSystemPowerStatus(ctypes.byref(power)):
+                    if power.ACLineStatus in (0, 1):
+                        source = "🔌 Plugged into AC Power" if power.ACLineStatus == 1 else "🔋 Running on Battery"
+                        lines.append(f"*Power:* {source}")
+                    if power.BatteryLifePercent != 255:
+                        lines.append(f"*Battery Level:* `{power.BatteryLifePercent}%`")
+                else:
+                    lines.append("*Power:* Unknown")
+            except (AttributeError, OSError):
+                lines.append("*Power:* Unknown")
+        else:
+            lines.append(f"*Power:* Not available on {platform.system()}")
+
         try:
-            up_res = subprocess.run(["uptime"], capture_output=True, text=True, timeout=3)
-            lines.append(f"*Uptime:* `{up_res.stdout.strip()}`")
-        except Exception:
+            drive = os.environ.get("SystemDrive", "C:") + os.sep if os.name == "nt" else os.path.abspath(os.sep)
+            disk = shutil.disk_usage(drive)
+            total_gb = disk.total / (1024 ** 3)
+            free_gb = disk.free / (1024 ** 3)
+            used_percent = 100 - (disk.free * 100 // disk.total)
+            lines.append(f"*Disk:* `{free_gb:.1f} GB free` of `{total_gb:.1f} GB` ({used_percent}% used)")
+        except OSError:
+            lines.append("*Disk:* Unknown")
+
+        try:
+            if os.name == "nt":
+                import ctypes
+                uptime_seconds = ctypes.windll.kernel32.GetTickCount64() // 1000
+                lines.append(f"*Uptime:* `{datetime.timedelta(seconds=uptime_seconds)}`")
+            else:
+                up_res = subprocess.run(["uptime"], capture_output=True, text=True, timeout=3)
+                if up_res.stdout.strip():
+                    lines.append(f"*Uptime:* `{up_res.stdout.strip()}`")
+        except (AttributeError, OSError, subprocess.SubprocessError):
             pass
 
         lines.append(f"\n⏰ *Time:* `{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}`")
@@ -466,112 +648,373 @@ class SystemActions:
 
     @staticmethod
     def lock_screen():
-        """Puts displays to sleep / locks Mac screen."""
+        """Locks the host workstation."""
         try:
-            subprocess.run(["pmset", "displaysleepnow"], timeout=3)
-            return "🔒 *Mac screen locked and display turned off.*"
-        except Exception as e:
+            if sys.platform == "darwin":
+                subprocess.run(["pmset", "displaysleepnow"], check=True, timeout=3)
+            elif os.name == "nt":
+                import ctypes
+                if not ctypes.windll.user32.LockWorkStation():
+                    raise OSError("Windows could not lock the workstation.")
+            else:
+                return f"Lock screen is not supported on {platform.system()}."
+            return f"🔒 *{platform.node()} screen locked.*"
+        except (AttributeError, OSError, subprocess.SubprocessError) as e:
             return f"❌ Failed to lock: {e}"
 
     @staticmethod
-    def run_terminal(cmd):
-        """Runs a bash/zsh terminal command."""
-        try:
-            res = subprocess.run(
-                cmd,
-                shell=True,
-                executable="/bin/zsh",
-                capture_output=True,
-                text=True,
-                timeout=45
-            )
-            out = res.stdout
-            err = res.stderr
-            combined = ""
-            if out:
-                combined += out
-            if err:
-                combined += f"\n[stderr]\n{err}"
-            if not combined.strip():
-                combined = "[Command executed successfully with no output]"
-            if len(combined) > 3500:
-                combined = combined[:3500] + "\n...[truncated]"
-            return f"```\n{combined}\n```"
-        except subprocess.TimeoutExpired:
-            return "⏱️ *Command timed out after 45 seconds.*"
-        except Exception as e:
-            return f"❌ *Execution error:* `{str(e)}`"
+    def find_cli_bin(provider):
+        """Finds a configured coding-agent CLI without invoking a shell."""
+        key, candidates = {
+            "antigravity": (
+                "antigravity_bin",
+                [
+                    os.path.expanduser("~/.local/bin/agy"),
+                    os.path.expanduser("~/.gemini/antigravity-ide/bin/agy"),
+                    shutil.which("agy"),
+                ],
+            ),
+            "claude": ("claude_bin", [shutil.which("claude"), shutil.which("claude.exe")]),
+        }[provider]
 
-    @staticmethod
-    def find_antigravity_bin():
-        """Dynamically locates the Antigravity CLI binary."""
-        configured = config.get("antigravity_bin", "")
+        configured = config.get(key, "")
         if configured:
             expanded = os.path.expanduser(configured)
-            if os.path.exists(expanded) and os.access(expanded, os.X_OK):
+            if os.path.isfile(expanded) and (os.name == "nt" or os.access(expanded, os.X_OK)):
                 return expanded
-        for p in [
-            os.path.expanduser("~/.local/bin/agy"),
-            os.path.expanduser("~/.gemini/antigravity-ide/bin/agy"),
-            shutil.which("agy")
-        ]:
-            if p and os.path.exists(p) and os.access(p, os.X_OK):
-                return p
-        return configured or "agy"
+        for candidate in candidates:
+            if candidate and os.path.isfile(candidate) and (os.name == "nt" or os.access(candidate, os.X_OK)):
+                if os.name == "nt" and candidate.lower().endswith((".cmd", ".bat")):
+                    continue
+                return candidate
+        return None
 
     @staticmethod
-    def run_antigravity(prompt):
-        """Runs Antigravity CLI non-interactively with the given prompt."""
-        agy_bin = SystemActions.find_antigravity_bin()
-        if not os.path.exists(agy_bin) and not shutil.which(agy_bin):
-            return f"❌ Antigravity CLI binary not found at `{agy_bin}`. Configure in config.json or install Antigravity."
+    def run_agent_cli(provider, prompt):
+        """Runs a locally installed coding-agent CLI after host approval."""
+        cli_path = SystemActions.find_cli_bin(provider)
+        if not cli_path:
+            return f"❌ {provider} CLI was not found. Configure it in the host app or install the CLI."
+        working_directory = os.path.expanduser(config.get("working_directory") or os.path.expanduser("~"))
+        if not os.path.isdir(working_directory):
+            return f"❌ Agent working directory does not exist: `{working_directory}`"
+        command = [cli_path, "-p", prompt]
+        global active_cli_process
+        process = None
         try:
-            cmd = [agy_bin, "-p", prompt]
-            res = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=120
+            with active_cli_process_lock:
+                active_cli_process = subprocess.Popen(
+                    command,
+                    cwd=working_directory,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                )
+                process = active_cli_process
+            try:
+                stdout, stderr = process.communicate(timeout=600)
+            except subprocess.TimeoutExpired:
+                process.terminate()
+                try:
+                    process.communicate(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.communicate()
+                return f"⏱️ {provider} task timed out after 10 minutes."
+            output = stdout.strip() or stderr.strip()
+            if len(output) > 3800:
+                output = output[:3800] + "\n...[response truncated]"
+            if process.returncode:
+                return output or f"❌ {provider} exited with code {process.returncode}."
+            return output or f"✅ {provider} completed the approved task."
+        except OSError as error:
+            logger.exception("Could not start %s CLI", provider)
+            return f"❌ Could not start {provider}: {error}"
+        finally:
+            with active_cli_process_lock:
+                if active_cli_process is process:
+                    active_cli_process = None
+
+
+def initialize_task_store():
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with closing(sqlite3.connect(TASK_DB_FILE, timeout=5)) as connection, connection:
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS agent_tasks (
+                id TEXT PRIMARY KEY,
+                provider TEXT NOT NULL CHECK (provider IN ('antigravity', 'claude')),
+                prompt TEXT NOT NULL,
+                requester_id INTEGER NOT NULL,
+                chat_id INTEGER NOT NULL,
+                status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'running', 'completed', 'rejected')),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                result TEXT,
+                delivery_channel TEXT NOT NULL DEFAULT 'telegram',
+                relay_host_id TEXT,
+                relay_command_id TEXT,
+                response_sent INTEGER NOT NULL DEFAULT 0
             )
-            out = res.stdout.strip()
-            if not out and res.stderr:
-                out = res.stderr.strip()
-            if len(out) > 3800:
-                out = out[:3800] + "\n...[response truncated]"
-            return out if out else "🤖 Antigravity completed the task."
-        except subprocess.TimeoutExpired:
-            return "⏱️ Antigravity prompt timed out after 2 minutes."
-        except Exception as e:
-            return f"❌ Antigravity execution error: {str(e)}"
+            """
+        )
+        task_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(agent_tasks)").fetchall()
+        }
+        for column, definition in (
+            ("delivery_channel", "TEXT NOT NULL DEFAULT 'telegram'"),
+            ("relay_host_id", "TEXT"),
+            ("relay_command_id", "TEXT"),
+            ("response_sent", "INTEGER NOT NULL DEFAULT 0"),
+        ):
+            if column not in task_columns:
+                connection.execute(f"ALTER TABLE agent_tasks ADD COLUMN {column} {definition}")
+        connection.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_tasks_relay_command "
+            "ON agent_tasks(relay_command_id) WHERE relay_command_id IS NOT NULL"
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_agent_tasks_status ON agent_tasks(status, created_at)"
+        )
+    if os.name != "nt":
+        os.chmod(TASK_DB_FILE, 0o600)
+
+
+def enqueue_agent_task(
+    provider,
+    prompt,
+    requester_id,
+    chat_id,
+    delivery_channel="telegram",
+    relay_host_id=None,
+    relay_command_id=None,
+):
+    prompt = prompt.strip()
+    if not prompt:
+        raise ValueError("The task prompt cannot be empty.")
+    if len(prompt) > 4000:
+        raise ValueError("Task prompts must be 4,000 characters or fewer.")
+
+    task_id = uuid.uuid4().hex
+    with closing(sqlite3.connect(TASK_DB_FILE, timeout=5)) as connection, connection:
+        if relay_command_id:
+            existing = connection.execute(
+                "SELECT id FROM agent_tasks WHERE relay_command_id = ?",
+                (relay_command_id,),
+            ).fetchone()
+            if existing:
+                return existing[0]
+        pending_count = connection.execute(
+            "SELECT COUNT(*) FROM agent_tasks WHERE status IN ('pending', 'approved', 'running')"
+        ).fetchone()[0]
+        if pending_count >= 100:
+            raise ValueError("The host task queue is full. Review pending tasks in MacRemote first.")
+        connection.execute(
+            "INSERT INTO agent_tasks "
+            "(id, provider, prompt, requester_id, chat_id, status, delivery_channel, relay_host_id, relay_command_id) "
+            "VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?)",
+            (task_id, provider, prompt, requester_id, chat_id, delivery_channel, relay_host_id, relay_command_id),
+        )
+    return task_id
+
+
+def process_approved_agent_tasks(bot, relay_client=None):
+    with closing(sqlite3.connect(TASK_DB_FILE, timeout=5)) as connection, connection:
+        connection.row_factory = sqlite3.Row
+        channel_filter = "AND (delivery_channel = 'relay' OR ? IS NOT NULL)"
+        task = connection.execute(
+            "SELECT id, provider, prompt, chat_id, delivery_channel FROM agent_tasks "
+            f"WHERE status = 'approved' {channel_filter} ORDER BY created_at LIMIT 1",
+            (1 if bot is not None else None,),
+        ).fetchone()
+        if not task:
+            return
+        updated = connection.execute(
+            "UPDATE agent_tasks SET status = 'running' WHERE id = ? AND status = 'approved'",
+            (task["id"],),
+        ).rowcount
+        if not updated:
+            return
+
+    result = SystemActions.run_agent_cli(task["provider"], task["prompt"])
+    status = "failed" if result.startswith(("❌", "⏱️")) else "completed"
+    with closing(sqlite3.connect(TASK_DB_FILE, timeout=5)) as connection, connection:
+        connection.execute(
+            "UPDATE agent_tasks SET status = ?, result = ?, response_sent = ? WHERE id = ?",
+            (status, result, int(task["delivery_channel"] == "telegram"), task["id"]),
+        )
+    if task["delivery_channel"] == "telegram":
+        bot.send_message(
+            task["chat_id"],
+            f"🤖 *{task['provider'].title()} task {task['id']} finished:*\n\n{result}",
+            reply_markup=get_main_keyboard(),
+        )
+    elif relay_client:
+        process_relay_task_responses(relay_client)
+
+
+def process_relay_task_responses(relay_client):
+    with closing(sqlite3.connect(TASK_DB_FILE, timeout=5)) as connection, connection:
+        connection.row_factory = sqlite3.Row
+        tasks = connection.execute(
+            "SELECT id, relay_command_id, status, result FROM agent_tasks "
+            "WHERE delivery_channel = 'relay' AND response_sent = 0 "
+            "AND status IN ('completed', 'rejected') ORDER BY created_at LIMIT 10"
+        ).fetchall()
+    for task in tasks:
+        result = task["result"] or (
+            "This coding-agent request was rejected on the host."
+            if task["status"] == "rejected"
+            else "Task finished without a result."
+        )
+        relay_status = "failed" if task["status"] == "rejected" or result.startswith(("❌", "⏱️")) else "completed"
+        try:
+            relay_client.report_command(
+                task["relay_command_id"],
+                relay_status,
+                {"taskId": task["id"], "text": result},
+            )
+            with closing(sqlite3.connect(TASK_DB_FILE, timeout=5)) as connection, connection:
+                connection.execute(
+                    "UPDATE agent_tasks SET response_sent = 1 WHERE id = ? AND response_sent = 0",
+                    (task["id"],),
+                )
+        except Exception:
+            logger.exception("Could not send the completed relay task result")
+
+
+def handle_relay_command(relay_client, bot, command):
+    command_id = command.get("id")
+    action = command.get("action")
+    payload = command.get("payload") or {}
+    if not isinstance(command_id, str) or not isinstance(action, str):
+        logger.error("Relay returned a malformed command.")
+        return
+
+    try:
+        if action == "status":
+            result = {"text": SystemActions.get_system_status()}
+        elif action == "screenshot":
+            photo_path, error = SystemActions.take_screenshot()
+            if not photo_path:
+                raise RuntimeError(error or "Screenshot could not be captured.")
+            try:
+                with open(photo_path, "rb") as photo:
+                    image = photo.read(3_500_001)
+                if len(image) > 3_500_000:
+                    raise RuntimeError("Screenshot is too large to send through the relay.")
+                result = {
+                    "mediaType": "image/jpeg",
+                    "imageBase64": base64.b64encode(image).decode("ascii"),
+                }
+            finally:
+                try:
+                    os.remove(photo_path)
+                except OSError:
+                    logger.warning("Could not remove temporary screenshot %s", photo_path)
+        elif action == "lock":
+            result = {"text": SystemActions.lock_screen()}
+        elif action == "open_folder":
+            result = {"text": SystemActions.open_finder(payload.get("path", ""))}
+        elif action == "agent_task":
+            task_id = enqueue_agent_task(
+                payload.get("provider", ""),
+                payload.get("prompt", ""),
+                requester_id=0,
+                chat_id=0,
+                delivery_channel="relay",
+                relay_host_id=relay_client.host_id,
+                relay_command_id=command_id,
+            )
+            result = {"taskId": task_id, "text": "Waiting for approval on the host."}
+            relay_client.report_command(command_id, "awaiting_approval", result)
+            return
+        else:
+            raise ValueError(f"Unsupported relay action: {action}")
+
+        message = result.get("text", "")
+        status = "failed" if message.startswith("❌") else "completed"
+        relay_client.report_command(command_id, status, result)
+    except Exception as error:
+        logger.exception("Relay command %s failed", command_id)
+        try:
+            relay_client.report_command(command_id, "failed", {"error": str(error)})
+        except Exception:
+            logger.exception("Could not report relay command failure")
+
+
+def run_agent_task_worker(bot, relay_client=None):
+    while not shutdown_event.wait(2):
+        try:
+            process_approved_agent_tasks(bot, relay_client)
+            if relay_client:
+                process_relay_task_responses(relay_client)
+        except Exception:
+            logger.exception("Approved task worker failed")
 
 
 class KeepAwakeManager:
-    """Keeps the Mac awake while plugged in on AC power."""
+    """Keeps the host awake using its native power-management API."""
     def __init__(self):
         self.process = None
         self.running = False
+        self.stop_event = threading.Event()
+        self.thread = None
 
     def start(self):
         if self.running:
             return
         self.running = True
-        thread = threading.Thread(target=self._run, daemon=True)
-        thread.start()
+        self.stop_event.clear()
+        self.thread = threading.Thread(target=self._run, daemon=True)
+        self.thread.start()
 
     def _run(self):
-        logger.info("KeepAwakeManager started (caffeinate assertion active while on AC).")
+        if os.name == "nt":
+            logger.info("KeepAwakeManager started (Windows system sleep prevention active).")
+            try:
+                import ctypes
+                continuous = 0x80000000
+                system_required = 0x00000001
+                while self.running:
+                    class SystemPowerStatus(ctypes.Structure):
+                        _fields_ = [
+                            ("ACLineStatus", ctypes.c_byte),
+                            ("BatteryFlag", ctypes.c_byte),
+                            ("BatteryLifePercent", ctypes.c_byte),
+                            ("Reserved1", ctypes.c_byte),
+                            ("BatteryLifeTime", ctypes.c_ulong),
+                            ("BatteryFullLifeTime", ctypes.c_ulong),
+                        ]
+
+                    power = SystemPowerStatus()
+                    if not ctypes.windll.kernel32.GetSystemPowerStatus(ctypes.byref(power)):
+                        logger.error("Windows could not read the current power state.")
+                        return
+                    state = continuous | (system_required if power.ACLineStatus == 1 else 0)
+                    if not ctypes.windll.kernel32.SetThreadExecutionState(state):
+                        logger.error("Windows could not set the keep-awake state.")
+                        return
+                    if self.stop_event.wait(30):
+                        break
+                ctypes.windll.kernel32.SetThreadExecutionState(continuous)
+            except (AttributeError, OSError):
+                logger.exception("Windows keep-awake could not be enabled.")
+            return
+
+        logger.info("KeepAwakeManager started (caffeinate assertion active).")
         while self.running:
             try:
                 self.process = subprocess.Popen(["caffeinate", "-s", "-i", "-m"])
                 self.process.wait()
-            except Exception as e:
+            except (OSError, subprocess.SubprocessError) as e:
                 if self.running:
                     logger.error(f"Caffeinate error: {e}")
             if self.running:
-                time.sleep(3)
+                self.stop_event.wait(3)
 
     def stop(self):
         self.running = False
+        self.stop_event.set()
         if self.process:
             try:
                 self.process.terminate()
@@ -582,11 +1025,9 @@ class KeepAwakeManager:
                 except Exception:
                     pass
             self.process = None
-        # Clean up any orphan caffeinate processes
-        try:
-            subprocess.run(["pkill", "-f", "caffeinate -s -i -m"], capture_output=True, timeout=2)
-        except Exception:
-            pass
+        if self.thread and self.thread is not threading.current_thread():
+            self.thread.join(timeout=2)
+        self.thread = None
 
 
 def handle_message(bot, msg):
@@ -600,7 +1041,11 @@ def handle_message(bot, msg):
 
     # Reload config to get latest allowed users in case it was edited
     global config
-    config = load_config()
+    try:
+        config = load_config()
+    except RuntimeError as error:
+        logger.error("%s", error)
+        return
     allowed_users = config.get("allowed_user_ids", [])
     pairing_pin = str(config.get("pairing_pin", "")).strip()
 
@@ -627,8 +1072,14 @@ def handle_message(bot, msg):
         if candidate_pin and candidate_pin == pairing_pin:
             if user_id not in config["allowed_user_ids"]:
                 config["allowed_user_ids"].append(user_id)
-                save_config(config)
-            mac_name = get_mac_model_info()
+                if not save_config(config):
+                    config["allowed_user_ids"].remove(user_id)
+                    bot.send_message(
+                        chat_id,
+                        "❌ Pairing could not be saved on this computer. Check the MacRemote activity log.",
+                    )
+                    return
+            mac_name = get_host_model_info()
             bot.send_message(
                 chat_id,
                 f"🎉 *Successfully Paired!*\n\n"
@@ -646,7 +1097,7 @@ def handle_message(bot, msg):
             )
             return
         elif len(allowed_users) == 0 or clean_text.lower().startswith("/start"):
-            mac_name = get_mac_model_info()
+            mac_name = get_host_model_info()
             bot.send_message(
                 chat_id,
                 f"🔒 *MacRemote Agent for {mac_name}*\n\n"
@@ -665,11 +1116,11 @@ def handle_message(bot, msg):
 
     # User is authorized - Process Commands
     lower_text = text.lower()
-    logger.info(f"Received command from {user_id}: {text}")
+    logger.info("Received message from authorized user %s", user_id)
 
     # 0. START
     if lower_text == "/start":
-        mac_name = get_mac_model_info()
+        mac_name = get_host_model_info()
         bot.send_message(
             chat_id,
             f"👋 *MacRemote Agent Active!*\n\n"
@@ -685,7 +1136,7 @@ def handle_message(bot, msg):
         bot.send_chat_action(chat_id, "upload_photo")
         photo_path, err = SystemActions.take_screenshot()
         if photo_path and os.path.exists(photo_path):
-            caption = f"📸 *Mac Screen* • {datetime.datetime.now().strftime('%H:%M:%S')}"
+            caption = f"📸 *Screen* • {datetime.datetime.now().strftime('%H:%M:%S')}"
             bot.send_photo(chat_id, photo_path, caption=caption)
             try:
                 os.remove(photo_path)
@@ -758,17 +1209,16 @@ def handle_message(bot, msg):
         res = SystemActions.lock_screen()
         bot.send_message(chat_id, res, reply_markup=get_main_keyboard())
 
-    # 7. RUN TERMINAL COMMAND
+    # 7. DISABLE REMOTE SHELL COMMANDS
     elif lower_text.startswith("/sh ") or lower_text.startswith("/cmd ") or lower_text.startswith("/bash "):
-        bot.send_chat_action(chat_id, "typing")
-        cmd = text.split(maxsplit=1)[1].strip()
-        bot.send_message(chat_id, f"⚙️ *Executing:* `{cmd}`...")
-        res = SystemActions.run_terminal(cmd)
-        bot.send_message(chat_id, res, reply_markup=get_main_keyboard())
+        bot.send_message(
+            chat_id,
+            "⛔ Remote shell commands are disabled. Use a built-in action or submit a coding-agent task for local host approval.",
+            reply_markup=get_main_keyboard(),
+        )
 
-    # 8. ANTIGRAVITY AI
+    # 8. CODING-AGENT TASKS
     elif lower_text.startswith("/agy ") or lower_text.startswith("antigravity ") or lower_text == "🤖 antigravity ai":
-        bot.send_chat_action(chat_id, "typing")
         if lower_text == "🤖 antigravity ai":
             bot.send_message(
                 chat_id,
@@ -776,29 +1226,57 @@ def handle_message(bot, msg):
                 f"Send me any task or prompt, for example:\n"
                 f"`/agy write a python script to organize my desktop`\n"
                 f"`/agy summarize my recent git commits`\n\n"
-                f"Antigravity will execute on your Mac and report the results right here!",
+                f"The task will wait for approval in the MacRemote host app before it starts.",
                 reply_markup=get_main_keyboard()
             )
         else:
             prompt = text.split(maxsplit=1)[1].strip()
-            bot.send_message(chat_id, f"🤖 *Antigravity is working on:* \"{prompt}\"...\n_Please wait..._")
-            res = SystemActions.run_antigravity(prompt)
-            bot.send_message(chat_id, res, reply_markup=get_main_keyboard())
+            try:
+                task_id = enqueue_agent_task("antigravity", prompt, user_id, chat_id)
+            except ValueError as error:
+                bot.send_message(chat_id, f"❌ {error}", reply_markup=get_main_keyboard())
+                return
+            bot.send_message(
+                chat_id,
+                f"⏳ Antigravity task `{task_id}` is waiting for approval on the host.",
+                reply_markup=get_main_keyboard(),
+            )
+
+    elif lower_text == "🧠 claude code":
+        bot.send_message(
+            chat_id,
+            "🧠 *Claude Code*\n\nSend a task with `/claude <prompt>`. It will wait for approval in the host app.",
+            reply_markup=get_main_keyboard(),
+        )
+
+    elif lower_text.startswith("/claude ") or lower_text.startswith("claude code "):
+        prompt = text.split(maxsplit=1)[1].strip()
+        try:
+            task_id = enqueue_agent_task("claude", prompt, user_id, chat_id)
+        except ValueError as error:
+            bot.send_message(chat_id, f"❌ {error}", reply_markup=get_main_keyboard())
+            return
+        bot.send_message(
+            chat_id,
+            f"⏳ Claude Code task `{task_id}` is waiting for approval on the host.",
+            reply_markup=get_main_keyboard(),
+        )
 
     # 9. HELP
     elif lower_text in ["/help", "help", "yardım"]:
-        mac_name = get_mac_model_info()
+        mac_name = get_host_model_info()
         help_text = (
             f"🚀 *MacRemote Agent for {mac_name}*\n\n"
-            f"Control your Mac anytime, anywhere from your phone:\n\n"
+            f"Control your computer from your phone:\n\n"
             f"📸 *Screenshot:* Tap `📸 Screenshot` or type `/ss`\n"
             f"🔋 *Battery & Power:* Tap `🔋 Status` or type `/status`\n"
-            f"📂 *Open Finder:* Tap `📂 Open Finder` or type `/finder <path>`\n"
+            f"📂 *Open folder:* Tap `📂 Open Finder` or type `/finder <path>`\n"
             f"💾 *Share to Drive:* Tap `💾 Google Drive` or `/drive <file>`\n"
             f"📥 *Send File to Phone:* Type `/get <filepath>`\n"
-            f"⚙️ *Run Command:* Type `/sh <command>`\n"
-            f"🤖 *Antigravity Agent:* Type `/agy <prompt>`\n"
-            f"🔒 *Lock Screen:* Tap `🔒 Lock Screen` or type `/lock`\n\n"
+            f"🤖 *Antigravity:* Type `/agy <prompt>`\n"
+            f"🧠 *Claude Code:* Type `/claude <prompt>`\n"
+            f"🔒 *Lock Screen:* Tap `🔒 Lock Screen` or type `/lock`\n"
+            f"Agent tasks wait for approval in the host app before they run.\n\n"
             f"💡 *Menu Button:* Tap the blue *Menu* button in the corner to see all commands."
         )
         bot.send_message(chat_id, help_text, reply_markup=get_main_keyboard())
@@ -835,47 +1313,71 @@ def handle_message(bot, msg):
                 bot.send_message(chat_id, res, reply_markup=get_main_keyboard())
                 return
 
-        # Fallback to Antigravity AI
-        bot.send_message(chat_id, f"🤖 *Consulting Antigravity for:* \"{text}\"...")
-        res = SystemActions.run_antigravity(text)
-        bot.send_message(chat_id, res, reply_markup=get_main_keyboard())
+        bot.send_message(
+            chat_id,
+            "I didn’t recognize that as a built-in action. Use `/agy <prompt>` or `/claude <prompt>` to submit a task for host approval.",
+            reply_markup=get_main_keyboard(),
+        )
 
 
 def main():
+    global config
     logger.info("Starting MacRemote Agent...")
 
     # Single-instance lock check
     if not acquire_instance_lock():
         sys.exit(1)
 
+    try:
+        config = load_config()
+    except RuntimeError as error:
+        logger.error("%s", error)
+        return
+    initialize_task_store()
+
     bot_token = config.get("bot_token", "").strip()
+    relay_url = config.get("relay_url", "").strip()
+    relay_host_id = config.get("relay_host_id", "").strip()
+    relay_host_token = config.get("relay_host_token", "").strip()
+    relay_client = None
+    relay_fields = [relay_url, relay_host_id, relay_host_token]
+    if any(relay_fields):
+        if not all(relay_fields):
+            logger.error("Relay settings are incomplete. Configure relay URL, host ID, and host token together.")
+        else:
+            try:
+                relay_client = RelayClient(relay_url, relay_host_id, relay_host_token)
+                logger.info("Relay connection configured.")
+            except ValueError as error:
+                logger.error("Relay configuration error: %s", error)
 
-    if not bot_token:
-        print("\n" + "="*60)
-        print("⚠️  TELEGRAM BOT TOKEN REQUIRED")
-        print("="*60)
-        print("1. Open Telegram on your phone.")
-        print("2. Search for '@BotFather' and tap START.")
-        print("3. Send: /newbot")
-        print("4. Follow the prompts to choose a Name and Username for your bot.")
-        print("5. Copy the HTTP API token provided by BotFather.")
-        print(f"6. Paste the token into:\n   {CONFIG_FILE}")
-        print(f"   Or run: ./setup.sh")
-        print(f"\nYour Pairing PIN: {config.get('pairing_pin')}")
-        print("="*60 + "\n")
+    bot = None
+    bot_info = {}
+    if bot_token:
+        candidate_bot = TelegramBot(bot_token)
+        me = candidate_bot.get_me()
+        if me.get("ok"):
+            bot = candidate_bot
+            bot_info = me.get("result", {})
+            logger.info("Bot connected: @%s (%s)", bot_info.get("username"), bot_info.get("first_name"))
+            bot.set_my_commands()
+        else:
+            logger.error("Could not connect to Telegram; relay mode will continue if configured.")
+    if bot is None and relay_client is None:
+        logger.error("Configure a Telegram bot or a MacRemote relay in the host app.")
         return
 
-    bot = TelegramBot(bot_token)
-    me = bot.get_me()
-    if not me.get("ok"):
-        logger.error(f"Failed to connect to Telegram: {me.get('error')}. Please verify bot_token in config.json.")
-        return
-
-    bot_info = me.get("result", {})
-    logger.info(f"Bot connected: @{bot_info.get('username')} ({bot_info.get('first_name')})")
-
-    # Register command menu and Menu button on Telegram
-    bot.set_my_commands()
+    threading.Thread(
+        target=run_agent_task_worker,
+        args=(bot, relay_client),
+        daemon=True,
+    ).start()
+    if relay_client:
+        threading.Thread(
+            target=relay_client.run_forever,
+            args=(bot,),
+            daemon=True,
+        ).start()
 
     # Start sleep prevention daemon
     global keep_awake_instance
@@ -885,22 +1387,25 @@ def main():
 
     pin = config.get("pairing_pin")
     allowed = config.get("allowed_user_ids", [])
-    if not allowed:
+    if bot and not allowed:
         print("\n" + "="*60)
         print(f"🔑 BOT READY FOR PAIRING!")
         print(f"Open Telegram on your phone, start @{bot_info.get('username')},")
         print(f"and send this command:")
         print(f"   /pair {pin}")
         print("="*60 + "\n")
-    else:
+    elif bot:
         logger.info(f"Authorized users: {allowed}")
 
     offset = None
-    logger.info("Agent is listening for remote commands from your phone...")
+    logger.info("Host agent is ready for phone commands and locally approved coding tasks.")
 
-    while True:
+    while not shutdown_event.is_set():
         try:
-            updates = bot.get_updates(offset=offset, timeout=25)
+            if bot is None:
+                shutdown_event.wait(1)
+                continue
+            updates = bot.get_updates(offset=offset, timeout=5)
             if updates.get("ok"):
                 for update in updates.get("result", []):
                     offset = update.get("update_id") + 1

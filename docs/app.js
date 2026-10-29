@@ -140,9 +140,8 @@ function simulateCommand(cmd) {
     } else if (cmd === '🤖 Antigravity AI') {
       appendBotBubble(`
         🤖 <strong>Antigravity AI Agent</strong><br><br>
-        <em>Task executed via local Antigravity CLI:</em><br>
-        Organized 12 files on your Desktop into categorized directories: <code>Documents/</code>, <code>Images/</code>, and <code>Archives/</code>.<br>
-        All changes committed to git.
+        <em>Sample response:</em><br>
+        Agent tasks are queued for host approval before the local CLI starts.
       `);
     } else if (cmd === '🔒 Lock Screen') {
       appendBotBubble(`
@@ -150,11 +149,9 @@ function simulateCommand(cmd) {
         System assertions remain active to process background commands.
       `);
     } else {
-      // Dynamic fallback
       appendBotBubble(`
-        🤖 <strong>Antigravity AI completed:</strong><br>
-        Executed: "<code>${escapeHtml(cmd)}</code>"<br>
-        Task completed successfully on your Mac.
+        <strong>Demo only</strong><br>
+        No command was sent to a computer. Use a built-in action in the real app, or submit an explicit agent prompt for host approval.
       `);
     }
   }, 400);
@@ -166,4 +163,46 @@ function sendCustomCommand() {
   if (!text) return;
   input.value = '';
   simulateCommand(text);
+}
+
+const menuButton = document.querySelector('.mobile-menu-toggle');
+const primaryNav = document.getElementById('primaryNav');
+
+if (menuButton && primaryNav) {
+  menuButton.addEventListener('click', () => {
+    const expanded = menuButton.getAttribute('aria-expanded') === 'true';
+    menuButton.setAttribute('aria-expanded', String(!expanded));
+    menuButton.setAttribute('aria-label', expanded ? 'Open navigation' : 'Close navigation');
+    primaryNav.classList.toggle('mobile-open', !expanded);
+  });
+
+  primaryNav.querySelectorAll('a').forEach((link) => {
+    link.addEventListener('click', () => {
+      menuButton.setAttribute('aria-expanded', 'false');
+      menuButton.setAttribute('aria-label', 'Open navigation');
+      primaryNav.classList.remove('mobile-open');
+    });
+  });
+}
+
+const revealElements = document.querySelectorAll(
+  '.hero-container > *, .section-header, .simulator-wrapper, .matrix-card, .architecture-diagram, .feature-card, .setup-step',
+);
+
+if ('IntersectionObserver' in window && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  revealElements.forEach((element, index) => {
+    element.classList.add('reveal');
+    element.style.transitionDelay = `${Math.min(index % 5, 4) * 70}ms`;
+  });
+  document.documentElement.classList.add('motion-ready');
+
+  const revealObserver = new IntersectionObserver((entries, observer) => {
+    entries.forEach((entry) => {
+      if (!entry.isIntersecting) return;
+      entry.target.classList.add('reveal-visible');
+      observer.unobserve(entry.target);
+    });
+  }, { threshold: 0.12, rootMargin: '0px 0px -36px 0px' });
+
+  revealElements.forEach((element) => revealObserver.observe(element));
 }

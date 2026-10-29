@@ -7,6 +7,11 @@ __pycache__/
 # MacRemote logs & runtime
 *.log
 *.pid
+macos/.build/
+android/.gradle/
+android/**/build/
+relay/data/
+dist/
 /tmp/
 .DS_Store
 
