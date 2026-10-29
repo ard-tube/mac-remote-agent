@@ -50,7 +50,7 @@ private final class AppModel: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
                 self?.stopAgent()
             }
         }
@@ -165,7 +165,7 @@ private final class AppModel: ObservableObject {
             process.standardOutput = handle
             process.standardError = handle
             process.terminationHandler = { [weak self] _ in
-                Task { @MainActor in
+                Task { @MainActor [weak self] in
                     self?.isAgentRunning = false
                 }
             }
@@ -246,7 +246,7 @@ private final class AppModel: ObservableObject {
             return
         }
         process.terminationHandler = { [weak self] _ in
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.agentProcess = nil
                 self.isAgentRunning = false
