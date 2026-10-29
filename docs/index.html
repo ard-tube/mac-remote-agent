@@ -56,7 +56,7 @@
     <div class="hero-container">
       <div class="badge-pill">
         <span class="badge-dot"></span>
-        <span>One small host app · controls from your phone</span>
+        <span>One command installs the Mac host and opens setup</span>
       </div>
       <h1 class="hero-title">
         Your computer,<br>
@@ -68,7 +68,7 @@
 
       <div class="install-bar">
         <span class="install-prefix">$</span>
-        <code id="installCommand">git clone https://github.com/ard-tube/mac-remote-agent.git</code>
+        <code id="installCommand">brew install ard-tube/mac-remote-agent/macremote &amp;&amp; macremote start</code>
         <button class="btn-copy" onclick="copyInstallCmd()" title="Copy command">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
@@ -412,11 +412,11 @@
           <div class="setup-step">
             <div class="step-badge">Recommended</div>
             <h3>Install the terminal-first Mac host</h3>
-            <p>Install with Homebrew or the one-line installer. The local dashboard manages pairing, configuration, logs, and host-side task approvals without opening the preview app bundle.</p>
+            <p>Copy this single command. It installs the Mac host and opens the local setup dashboard—no repository clone, build commands, or extra terminal steps.</p>
             <div class="code-box">
-              <code>brew tap ard-tube/mac-remote-agent https://github.com/ard-tube/mac-remote-agent &amp;&amp; brew install macremote &amp;&amp; macremote start</code>
+              <code>brew install ard-tube/mac-remote-agent/macremote &amp;&amp; macremote start</code>
             </div>
-            <p>Or run <code>curl -fsSL https://raw.githubusercontent.com/ard-tube/mac-remote-agent/main/install.sh | sh</code>. The dashboard listens only on <code>127.0.0.1</code>; coding-agent requests still require local approval.</p>
+            <p>The dashboard opens on this Mac and stays available while you set up a connection. Phone control requires HTTPS relay credentials; this project does not currently operate a public relay. The dashboard listens only on <code>127.0.0.1</code>, and coding-agent requests still require local approval.</p>
           </div>
           <div class="setup-step">
             <div class="step-badge">macOS</div>

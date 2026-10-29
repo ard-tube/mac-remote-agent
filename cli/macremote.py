@@ -200,6 +200,82 @@ def _agent_process_running() -> bool:
         return False
 
 
+def _dashboard_ready() -> bool:
+    try:
+        _request_json("/api/status", _dashboard_token())
+        return True
+    except (OSError, urllib.error.URLError, ValueError):
+        return False
+
+
+def _connection_configured(config: dict[str, Any]) -> bool:
+    if str(config.get("bot_token", "")).strip():
+        return True
+    relay_url = str(config.get("relay_url", "")).strip()
+    host_id = str(config.get("relay_host_id", "")).strip()
+    host_token = str(config.get("relay_host_token", "")).strip()
+    return (
+        _valid_relay_url(relay_url)
+        and 16 <= len(host_id) <= 64
+        and all(character.isascii() and (character.isalnum() or character in "_-") for character in host_id)
+        and bool(host_token)
+    )
+
+
+def _start_host_agent(
+    config: dict[str, Any], runtime_agent_path: Path, log_handle: Any
+) -> subprocess.Popen | None:
+    if not _connection_configured(config):
+        print(
+            "Host connection not configured. Open the dashboard and choose Telegram or a relay.",
+            file=log_handle,
+            flush=True,
+        )
+        return None
+    try:
+        return subprocess.Popen(
+            [sys.executable, str(runtime_agent_path)],
+            cwd=str(APP_HOME),
+            stdin=subprocess.DEVNULL,
+            stdout=log_handle,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+            close_fds=True,
+        )
+    except OSError as error:
+        print(f"Could not start the host agent: {error}", file=log_handle, flush=True)
+        return None
+
+
+def _supervise_host_agent(
+    stop_event: threading.Event,
+    server: ThreadingHTTPServer,
+    agent: Any,
+    runtime_agent_path: Path,
+    log_handle: Any,
+) -> None:
+    while not stop_event.wait(0.5):
+        if server.agent_restart_event.is_set():
+            server.agent_restart_event.clear()
+            if server.agent_process is not None:
+                _terminate_agent(server.agent_process)
+                server.agent_process = None
+            config = agent.load_config()
+            if _connection_configured(config):
+                server.agent_message = "Starting host agent."
+                server.agent_process = _start_host_agent(config, runtime_agent_path, log_handle)
+            else:
+                server.agent_message = "No connection configured. Choose Telegram or a relay in Settings."
+                print(server.agent_message, file=log_handle, flush=True)
+        if server.agent_process is not None and server.agent_process.poll() is not None:
+            status = server.agent_process.returncode
+            server.agent_process = None
+            server.agent_message = (
+                f"Host agent stopped with exit code {status}. Check Live logs and your connection settings."
+            )
+            print(server.agent_message, file=log_handle, flush=True)
+
+
 def command_status(_: argparse.Namespace) -> int:
     pid = _service_pid()
     agent_running = _agent_process_running() if pid else False
@@ -253,12 +329,12 @@ def command_start(args: argparse.Namespace) -> int:
             return 1
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline:
-            if _service_pid() and _agent_process_running():
+            if _service_pid() and _dashboard_ready():
                 break
             if process.poll() is not None:
                 break
             time.sleep(0.2)
-        if not _service_pid():
+        if not _service_pid() or not _dashboard_ready():
             print("MacRemote did not start. Recent logs:")
             command_logs(argparse.Namespace(follow=False, lines=20))
             return 1
@@ -558,6 +634,7 @@ def _make_handler(token: str):
             try:
                 if path == "/api/status":
                     agent_running = self.server.agent_process is not None and self.server.agent_process.poll() is None
+                    config = _load_config()
                     _json_response(
                         self,
                         200,
@@ -565,7 +642,9 @@ def _make_handler(token: str):
                             "service_running": True,
                             "agent_running": agent_running,
                             "platform": platform.platform(),
-                            "relay_url": _load_config().get("relay_url", ""),
+                            "connection_configured": _connection_configured(config),
+                            "connection_message": getattr(self.server, "agent_message", ""),
+                            "relay_url": config.get("relay_url", ""),
                         },
                     )
                 elif path == "/api/config":
@@ -591,7 +670,11 @@ def _make_handler(token: str):
             try:
                 data = self._read_json()
                 if path == "/api/config":
-                    _json_response(self, 200, {"config": _save_config(data)})
+                    saved_config = _save_config(data)
+                    restart_event = getattr(self.server, "agent_restart_event", None)
+                    if restart_event is not None:
+                        restart_event.set()
+                    _json_response(self, 200, {"config": saved_config})
                 elif path.startswith("/api/tasks/") and path.endswith("/approve"):
                     task_id = urllib.parse.unquote(path[len("/api/tasks/") : -len("/approve")].strip("/"))
                     if not _set_task_status(task_id, "approved"):
@@ -652,27 +735,19 @@ def run_foreground_daemon() -> int:
     _ensure_data_dir()
     token = _dashboard_token()
     agent = _agent_module()
-    agent.load_config()
+    config = agent.load_config()
     runtime_agent_path = _runtime_agent_path()
     log_handle = _open_private_log()
-    process = subprocess.Popen(
-        [sys.executable, str(runtime_agent_path)],
-        cwd=str(APP_HOME),
-        stdin=subprocess.DEVNULL,
-        stdout=log_handle,
-        stderr=subprocess.STDOUT,
-        start_new_session=True,
-        close_fds=True,
-    )
     try:
         with socket.socket() as probe:
             probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             probe.bind((HOST, PORT))
         server = ThreadingHTTPServer((HOST, PORT), _make_handler(token))
         server.daemon_threads = True
-        server.agent_process = process
+        server.agent_process = None
+        server.agent_restart_event = threading.Event()
+        server.agent_message = "No connection configured. Choose Telegram or a relay in Settings."
     except OSError as error:
-        _terminate_agent(process)
         log_handle.close()
         print(f"Could not bind the local dashboard to {HOST}:{PORT}: {error}", file=sys.stderr)
         return 1
@@ -690,16 +765,19 @@ def run_foreground_daemon() -> int:
         server_thread = threading.Thread(target=server.serve_forever, name="macremote-dashboard", daemon=True)
         server_thread.start()
         print(f"MacRemote daemon ready at {_dashboard_url()}", flush=True)
-        while not stop_event.wait(0.5):
-            if process.poll() is not None:
-                print(f"Host agent exited with status {process.returncode}", flush=True)
-                return process.returncode or 1
+        if _connection_configured(config):
+            server.agent_message = "Starting host agent."
+            server.agent_process = _start_host_agent(config, runtime_agent_path, log_handle)
+        else:
+            print(server.agent_message, file=log_handle, flush=True)
+        _supervise_host_agent(stop_event, server, agent, runtime_agent_path, log_handle)
         return 0
     finally:
         if server_thread is not None and server_thread.is_alive():
             server.shutdown()
         server.server_close()
-        _terminate_agent(process)
+        if server.agent_process is not None:
+            _terminate_agent(server.agent_process)
         log_handle.close()
         try:
             if PID_FILE.read_text(encoding="utf-8").strip() == str(os.getpid()):

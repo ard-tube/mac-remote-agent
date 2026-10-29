@@ -103,10 +103,23 @@ async function loadStatus() {
   try {
     const status = await api("/api/status");
     const online = status.agent_running;
+    const configured = status.connection_configured;
     document.querySelector("#host-indicator").classList.toggle("online", online);
-    document.querySelector("#host-state").textContent = online ? "Host online" : "Agent stopped";
-    document.querySelector("#agent-stat").textContent = online ? "Running" : "Stopped";
+    document.querySelector("#host-state").textContent = online ? "Host online" : configured ? "Connecting" : "Setup required";
+    document.querySelector("#agent-stat").textContent = online ? "Running" : configured ? "Starting" : "Set up connection";
     document.querySelector("#platform-stat").textContent = status.platform;
+    const setupNotice = document.querySelector("#setup-notice");
+    setupNotice.hidden = online;
+    document.querySelector("#setup-title").textContent = configured
+      ? "The host agent is not connected"
+      : "Finish your one-time connection setup";
+    document.querySelector("#setup-description").textContent = configured
+      ? status.connection_message || "Check Live logs and your connection settings."
+      : "Choose Telegram or enter your HTTPS relay details. The dashboard stays open while you set this up.";
+    document.querySelector("#hero-action").dataset.openSection = configured ? "approvals" : "settings";
+    document.querySelector("#hero-action").innerHTML = configured
+      ? 'Review approvals <span>→</span>'
+      : 'Set up connection <span>→</span>';
     const relay = status.relay_url || "";
     document.querySelector("#relay-stat").textContent = relay ? new URL(relay).host : "Not set up";
   } catch (error) {
