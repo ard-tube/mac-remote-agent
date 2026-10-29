@@ -1,8 +1,8 @@
-import json
-import os
 import contextlib
 import hashlib
 import io
+import json
+import os
 import sqlite3
 import subprocess
 import sys
@@ -74,7 +74,7 @@ class MacRemoteCliTests(unittest.TestCase):
     def test_dashboard_approval_updates_only_pending_tasks(self):
         with tempfile.TemporaryDirectory() as temporary:
             database = Path(temporary) / "tasks.sqlite3"
-            with sqlite3.connect(database) as connection:
+            with contextlib.closing(sqlite3.connect(database)) as connection, connection:
                 connection.execute(
                     "CREATE TABLE agent_tasks (id TEXT PRIMARY KEY, provider TEXT, prompt TEXT, "
                     "status TEXT, result TEXT)"
@@ -88,7 +88,7 @@ class MacRemoteCliTests(unittest.TestCase):
                 self.assertTrue(macremote._set_task_status("pending-task", "approved"))
                 self.assertFalse(macremote._set_task_status("pending-task", "rejected"))
                 self.assertFalse(macremote._set_task_status("completed-task", "approved"))
-            with sqlite3.connect(database) as connection:
+            with contextlib.closing(sqlite3.connect(database)) as connection:
                 statuses = dict(connection.execute("SELECT id, status FROM agent_tasks"))
             self.assertEqual(statuses["pending-task"], "approved")
             self.assertEqual(statuses["completed-task"], "completed")

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Create a reproducible Homebrew/standalone CLI archive."""
 
+import io
 import sys
 import tarfile
 from pathlib import Path
@@ -27,8 +28,9 @@ def main() -> None:
                 metadata.uname = metadata.gname = ""
                 metadata.mtime = 0
                 metadata.mode = 0o755 if target == "macremote.py" else 0o644
-                with source.open("rb") as content:
-                    archive.addfile(metadata, content)
+                content = source.read_bytes().replace(b"\r\n", b"\n")
+                metadata.size = len(content)
+                archive.addfile(metadata, io.BytesIO(content))
 
 
 if __name__ == "__main__":
