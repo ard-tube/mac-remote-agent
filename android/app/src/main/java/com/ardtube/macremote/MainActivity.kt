@@ -8,12 +8,24 @@ import android.security.keystore.KeyProperties
 import android.util.Base64
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -24,16 +36,36 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.DesktopWindows
+import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.PhotoCamera
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Security
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.SmartToy
+import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -42,9 +74,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -73,15 +108,47 @@ import javax.crypto.spec.GCMParameterSpec
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge(
+            statusBarStyle = androidx.activity.SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = androidx.activity.SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+        )
         val securePreferences = SecurePreferences(this)
         setContent {
-            MaterialTheme {
+            MaterialTheme(colorScheme = MacRemoteColorScheme) {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     RelayScreen(securePreferences)
                 }
             }
         }
     }
+}
+
+private val MacRemoteColorScheme = darkColorScheme(
+    primary = Color(0xFF83B8FF),
+    onPrimary = Color(0xFF09213D),
+    primaryContainer = Color(0xFF173B63),
+    onPrimaryContainer = Color(0xFFD8E9FF),
+    secondary = Color(0xFF72D8E5),
+    onSecondary = Color(0xFF06252B),
+    background = Color(0xFF07111F),
+    onBackground = Color(0xFFEAF2FC),
+    surface = Color(0xFF0D1A2A),
+    onSurface = Color(0xFFEAF2FC),
+    surfaceVariant = Color(0xFF18283C),
+    onSurfaceVariant = Color(0xFFA8B8CD),
+    surfaceContainerLow = Color(0xFF0C1928),
+    surfaceContainer = Color(0xFF112137),
+    surfaceContainerHigh = Color(0xFF192B42),
+    outline = Color(0xFF52657D),
+    error = Color(0xFFFF9AA8),
+    onError = Color(0xFF3A0710),
+)
+
+private enum class AppSection(val title: String, val label: String, val icon: ImageVector) {
+    HOME("Your workspace", "Home", Icons.Outlined.Home),
+    CONTROL("Remote control", "Control", Icons.Outlined.Tune),
+    ACTIVITY("Activity", "Activity", Icons.Outlined.History),
+    SETTINGS("Connection", "Settings", Icons.Outlined.Settings),
 }
 
 private data class RelaySettings(
@@ -174,8 +241,12 @@ private fun RelayScreen(securePreferences: SecurePreferences) {
     var providerMenuOpen by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var selectedSection by remember { mutableStateOf(AppSection.HOME) }
     val scope = rememberCoroutineScope()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val hasConnection = settings.relayUrl.isNotBlank() &&
+        settings.hostId.isNotBlank() &&
+        settings.phoneToken.isNotBlank()
 
     LaunchedEffect(Unit) {
         try {
@@ -251,200 +322,567 @@ private fun RelayScreen(securePreferences: SecurePreferences) {
         }
     }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        item {
-            Column(modifier = Modifier.padding(top = 28.dp)) {
-                Text("MacRemote", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                Text("Secure remote control for your Mac or Windows PC.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-        item {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Spacer(
-                        modifier = Modifier.size(10.dp)
-                            .background(if (connectionStatus.startsWith("Connected")) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline, CircleShape),
-                    )
-                    Column {
-                        Text(connectionStatus, fontWeight = FontWeight.SemiBold)
-                        if (lastSeen.isNotBlank()) Text("Host last seen $lastSeen", style = MaterialTheme.typography.bodySmall)
-                    }
+    fun loadScreenshot(command: RemoteCommand) {
+        scope.launch {
+            busy = true
+            errorMessage = null
+            try {
+                val updated = withContext(Dispatchers.IO) {
+                    RelayApi.getCommand(settings, command.id)
                 }
+                commands = commands.map { if (it.id == command.id) updated else it }
+            } catch (error: IOException) {
+                errorMessage = error.message ?: "Could not load the screenshot."
+            } finally {
+                busy = false
             }
         }
-        item {
-            Card {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    Text("Connect your host", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                    Text("Use the relay URL, host ID, and phone token from your private provisioning output.", style = MaterialTheme.typography.bodySmall)
-                    OutlinedTextField(
-                        value = relayUrl,
-                        onValueChange = { relayUrl = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("HTTPS relay URL") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                    )
-                    OutlinedTextField(
-                        value = hostId,
-                        onValueChange = { hostId = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Host ID") },
-                        singleLine = true,
-                    )
-                    OutlinedTextField(
-                        value = phoneToken,
-                        onValueChange = { phoneToken = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Phone token") },
-                        visualTransformation = PasswordVisualTransformation(),
-                        singleLine = true,
-                    )
-                    Button(onClick = ::saveConnection, enabled = settingsLoaded && !busy, modifier = Modifier.fillMaxWidth()) {
-                        Text("Save encrypted connection")
-                    }
+    }
+
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        bottomBar = {
+            BottomDock(selected = selectedSection, onSelect = { selectedSection = it })
+        },
+    ) { contentPadding ->
+        AnimatedContent(
+            targetState = selectedSection,
+            modifier = Modifier.fillMaxSize().padding(contentPadding),
+            transitionSpec = {
+                (fadeIn(tween(180)) + slideInHorizontally(tween(180)) { it / 18 }) togetherWith
+                    (fadeOut(tween(120)) + slideOutHorizontally(tween(120)) { -it / 18 })
+            },
+            label = "MacRemote section transition",
+        ) { section ->
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(start = 20.dp, top = 18.dp, end = 20.dp, bottom = 28.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                item { AppHeader(section) }
+                item { HostStatusCard(connectionStatus, lastSeen) }
+                if (errorMessage != null) {
+                    item { ErrorBanner(errorMessage.orEmpty()) }
                 }
-            }
-        }
-        item {
-            Card {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    Text("Quick actions", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { sendAction("status") }, enabled = !busy) { Text("Status") }
-                        OutlinedButton(onClick = { sendAction("screenshot") }, enabled = !busy) { Text("Screenshot") }
-                        OutlinedButton(onClick = { sendAction("lock") }, enabled = !busy) { Text("Lock") }
-                    }
-                    OutlinedTextField(
-                        value = folderPath,
-                        onValueChange = { folderPath = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Folder path to open") },
-                        singleLine = true,
-                    )
-                    OutlinedButton(
-                        onClick = { sendAction("open_folder", JSONObject().put("path", folderPath)) },
-                        enabled = !busy && folderPath.isNotBlank(),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) { Text("Open folder") }
-                }
-            }
-        }
-        item {
-            Card {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    Text("Coding-agent task", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                    Text("Every task waits for approval on the host computer before it runs.", style = MaterialTheme.typography.bodySmall)
-                    OutlinedButton(onClick = { providerMenuOpen = true }) { Text("Provider: $provider") }
-                    DropdownMenu(expanded = providerMenuOpen, onDismissRequest = { providerMenuOpen = false }) {
-                        listOf("Claude Code", "Antigravity").forEach { option ->
-                            DropdownMenuItem(
-                                text = { Text(option) },
-                                onClick = {
-                                    provider = option
-                                    providerMenuOpen = false
-                                },
+                when (section) {
+                    AppSection.HOME -> {
+                        item {
+                            HomeSection(
+                                hasConnection = hasConnection,
+                                commands = commands.take(3),
+                                onOpenSettings = { selectedSection = AppSection.SETTINGS },
+                                onOpenActivity = { selectedSection = AppSection.ACTIVITY },
+                                onAction = { action -> sendAction(action) },
+                                onScreenshot = ::loadScreenshot,
+                                busy = busy,
                             )
                         }
                     }
-                    OutlinedTextField(
-                        value = prompt,
-                        onValueChange = { prompt = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Describe the task") },
-                        minLines = 3,
-                    )
-                    Button(
-                        onClick = {
-                            val providerId = if (provider == "Claude Code") "claude" else "antigravity"
-                            sendAction("agent_task", JSONObject().put("provider", providerId).put("prompt", prompt))
-                        },
-                        enabled = !busy && prompt.isNotBlank() && prompt.length <= 4000,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) { Text("Send for host approval") }
+
+                    AppSection.CONTROL -> {
+                        item {
+                            ControlSection(
+                                folderPath = folderPath,
+                                onFolderPathChange = { folderPath = it },
+                                prompt = prompt,
+                                onPromptChange = { prompt = it },
+                                provider = provider,
+                                providerMenuOpen = providerMenuOpen,
+                                onProviderMenuOpenChange = { providerMenuOpen = it },
+                                onProviderChange = { provider = it },
+                                hasConnection = hasConnection,
+                                busy = busy,
+                                onAction = ::sendAction,
+                            )
+                        }
+                    }
+
+                    AppSection.ACTIVITY -> {
+                        if (commands.isEmpty()) {
+                            item { EmptyActivity() }
+                        } else {
+                            items(commands, key = { it.id }) { command ->
+                                ActivityCard(
+                                    command = command,
+                                    busy = busy,
+                                    onLoadScreenshot = { loadScreenshot(command) },
+                                )
+                            }
+                        }
+                    }
+
+                    AppSection.SETTINGS -> {
+                        item {
+                            ConnectionSettings(
+                                relayUrl = relayUrl,
+                                onRelayUrlChange = { relayUrl = it },
+                                hostId = hostId,
+                                onHostIdChange = { hostId = it },
+                                phoneToken = phoneToken,
+                                onPhoneTokenChange = { phoneToken = it },
+                                settingsLoaded = settingsLoaded,
+                                busy = busy,
+                                onSave = ::saveConnection,
+                            )
+                        }
+                    }
                 }
             }
         }
-        if (errorMessage != null) {
-            item {
+    }
+}
+
+@Composable
+private fun BottomDock(selected: AppSection, onSelect: (AppSection) -> Unit) {
+    NavigationBar(
+        modifier = Modifier
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .clip(RoundedCornerShape(26.dp)),
+        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+        tonalElevation = 0.dp,
+    ) {
+        AppSection.entries.forEach { section ->
+            NavigationBarItem(
+                selected = selected == section,
+                onClick = { onSelect(section) },
+                icon = { Icon(section.icon, contentDescription = null) },
+                label = { Text(section.label) },
+                colors = NavigationBarItemDefaults.colors(
+                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                    indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                ),
+            )
+        }
+    }
+}
+
+@Composable
+private fun AppHeader(section: AppSection) {
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Surface(shape = RoundedCornerShape(15.dp), color = MaterialTheme.colorScheme.primaryContainer) {
+                Icon(
+                    Icons.Outlined.DesktopWindows,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(11.dp).size(24.dp),
+                )
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("MACREMOTE", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.Bold)
+                Text("A little closer to home.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(section.title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Text(
+                text = when (section) {
+                    AppSection.HOME -> "Your computer, ready when you are."
+                    AppSection.CONTROL -> "Useful tools, right at your fingertips."
+                    AppSection.ACTIVITY -> "A clear record of requests and results."
+                    AppSection.SETTINGS -> "Securely pair your phone and computer."
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun HostStatusCard(connectionStatus: String, lastSeen: String) {
+    val connected = connectionStatus.startsWith("Connected")
+    val indicatorColor by animateColorAsState(
+        targetValue = if (connected) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.outline,
+        animationSpec = tween(350),
+        label = "connection status color",
+    )
+    PanelCard {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Surface(shape = CircleShape, color = if (connected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh) {
+                Icon(
+                    Icons.Outlined.DesktopWindows,
+                    contentDescription = null,
+                    tint = if (connected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(12.dp).size(22.dp),
+                )
+            }
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text("YOUR COMPUTER", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+                Text(connectionStatus, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                if (lastSeen.isNotBlank()) {
+                    Text("Last seen $lastSeen", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            Spacer(modifier = Modifier.size(9.dp).background(indicatorColor, CircleShape))
+        }
+    }
+}
+
+@Composable
+private fun HomeSection(
+    hasConnection: Boolean,
+    commands: List<RemoteCommand>,
+    onOpenSettings: () -> Unit,
+    onOpenActivity: () -> Unit,
+    onAction: (String) -> Unit,
+    onScreenshot: (RemoteCommand) -> Unit,
+    busy: Boolean,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        if (!hasConnection) {
+            PanelCard {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
+                    Icon(Icons.Outlined.Security, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
+                    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Text("One quick setup", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Text("Add your private HTTPS relay details to connect your computer.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        TextButton(onClick = onOpenSettings) {
+                            Text("Set up connection")
+                            Icon(Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = null, modifier = Modifier.padding(start = 6.dp).size(17.dp))
+                        }
+                    }
+                }
+            }
+        }
+
+        SectionHeading("Quick actions", "Send a simple request to your computer")
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            QuickActionCard(
+                label = "Status",
+                icon = Icons.Outlined.Refresh,
+                enabled = hasConnection && !busy,
+                modifier = Modifier.weight(1f),
+            ) { onAction("status") }
+            QuickActionCard(
+                label = "Screenshot",
+                icon = Icons.Outlined.PhotoCamera,
+                enabled = hasConnection && !busy,
+                modifier = Modifier.weight(1f),
+            ) { onAction("screenshot") }
+            QuickActionCard(
+                label = "Lock",
+                icon = Icons.Outlined.Lock,
+                enabled = hasConnection && !busy,
+                modifier = Modifier.weight(1f),
+            ) { onAction("lock") }
+        }
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                SectionHeading("Recent activity", "Your latest remote requests")
+            }
+            TextButton(onClick = onOpenActivity) { Text("See all") }
+        }
+        if (commands.isEmpty()) {
+            EmptyActivity(compact = true)
+        } else {
+            commands.forEach { command ->
+                ActivityCard(command = command, busy = busy, onLoadScreenshot = { onScreenshot(command) })
+            }
+        }
+    }
+}
+
+@Composable
+private fun ControlSection(
+    folderPath: String,
+    onFolderPathChange: (String) -> Unit,
+    prompt: String,
+    onPromptChange: (String) -> Unit,
+    provider: String,
+    providerMenuOpen: Boolean,
+    onProviderMenuOpenChange: (Boolean) -> Unit,
+    onProviderChange: (String) -> Unit,
+    hasConnection: Boolean,
+    busy: Boolean,
+    onAction: (String, JSONObject) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        if (!hasConnection) {
+            InfoBanner("Connect your computer in Settings before sending remote requests.")
+        }
+        SectionHeading("Shortcuts", "Fast, safe actions for this host")
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            QuickActionCard("Status", Icons.Outlined.Refresh, hasConnection && !busy, Modifier.weight(1f)) {
+                onAction("status", JSONObject())
+            }
+            QuickActionCard("Screenshot", Icons.Outlined.PhotoCamera, hasConnection && !busy, Modifier.weight(1f)) {
+                onAction("screenshot", JSONObject())
+            }
+            QuickActionCard("Lock", Icons.Outlined.Lock, hasConnection && !busy, Modifier.weight(1f)) {
+                onAction("lock", JSONObject())
+            }
+        }
+
+        PanelCard {
+            SectionHeading("Open a folder", "Jump to a known folder on your host")
+            OutlinedTextField(
+                value = folderPath,
+                onValueChange = onFolderPathChange,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Folder path") },
+                placeholder = { Text("/Users/you/Projects") },
+                singleLine = true,
+            )
+            Button(
+                onClick = { onAction("open_folder", JSONObject().put("path", folderPath)) },
+                enabled = hasConnection && !busy && folderPath.isNotBlank(),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(Icons.Outlined.FolderOpen, contentDescription = null)
+                Text("Open folder", modifier = Modifier.padding(start = 8.dp))
+            }
+        }
+
+        PanelCard {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Icon(Icons.Outlined.SmartToy, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                SectionHeading("Ask a coding agent", "The host must approve before work begins")
+            }
+            OutlinedButton(onClick = { onProviderMenuOpenChange(true) }) {
+                Text(provider)
+            }
+            DropdownMenu(expanded = providerMenuOpen, onDismissRequest = { onProviderMenuOpenChange(false) }) {
+                listOf("Claude Code", "Antigravity").forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(option) },
+                        onClick = {
+                            onProviderChange(option)
+                            onProviderMenuOpenChange(false)
+                        },
+                    )
+                }
+            }
+            OutlinedTextField(
+                value = prompt,
+                onValueChange = onPromptChange,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("What should it do?") },
+                placeholder = { Text("Describe one task clearly…") },
+                supportingText = { Text("${prompt.length}/4000 characters") },
+                minLines = 3,
+                maxLines = 6,
+            )
+            Button(
+                onClick = {
+                    val providerId = if (provider == "Claude Code") "claude" else "antigravity"
+                    onAction("agent_task", JSONObject().put("provider", providerId).put("prompt", prompt))
+                },
+                enabled = hasConnection && !busy && prompt.isNotBlank() && prompt.length <= 4000,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(Icons.Outlined.Security, contentDescription = null)
+                Text("Send for host approval", modifier = Modifier.padding(start = 8.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ConnectionSettings(
+    relayUrl: String,
+    onRelayUrlChange: (String) -> Unit,
+    hostId: String,
+    onHostIdChange: (String) -> Unit,
+    phoneToken: String,
+    onPhoneTokenChange: (String) -> Unit,
+    settingsLoaded: Boolean,
+    busy: Boolean,
+    onSave: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        PanelCard {
+            SectionHeading("Pair your computer", "Use the private details created by your relay")
+            OutlinedTextField(
+                value = relayUrl,
+                onValueChange = onRelayUrlChange,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("HTTPS relay URL") },
+                placeholder = { Text("https://relay.example.com") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+            )
+            OutlinedTextField(
+                value = hostId,
+                onValueChange = onHostIdChange,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Host ID") },
+                singleLine = true,
+            )
+            OutlinedTextField(
+                value = phoneToken,
+                onValueChange = onPhoneTokenChange,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Phone token") },
+                visualTransformation = PasswordVisualTransformation(),
+                singleLine = true,
+            )
+            Button(
+                onClick = onSave,
+                enabled = settingsLoaded && !busy,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(if (busy) "Saving securely…" else "Save connection")
+            }
+        }
+        InfoBanner("Connection details are encrypted on this phone with Android Keystore. Use a relay you trust.")
+    }
+}
+
+@Composable
+private fun ActivityCard(command: RemoteCommand, busy: Boolean, onLoadScreenshot: () -> Unit) {
+    PanelCard {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                command.action.replace('_', ' ').replaceFirstChar { it.uppercase() },
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Surface(shape = RoundedCornerShape(40.dp), color = MaterialTheme.colorScheme.primaryContainer) {
                 Text(
-                    text = errorMessage.orEmpty(),
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(horizontal = 4.dp),
+                    command.status.replace('_', ' '),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
                 )
             }
         }
-        item {
-            Text("Recent activity", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-        }
-        if (commands.isEmpty()) {
-            item { Text("Commands and host responses will appear here.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        } else {
-            items(commands, key = { it.id }) { command ->
-                Card(shape = RoundedCornerShape(16.dp)) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            Text(command.action.replace('_', ' ').replaceFirstChar { it.uppercase() }, fontWeight = FontWeight.SemiBold)
-                            Text(command.status.replace('_', ' '), color = MaterialTheme.colorScheme.primary)
-                        }
-                        Text(command.createdAt, style = MaterialTheme.typography.labelSmall)
-                        if (command.details.isNotBlank()) Text(command.details, style = MaterialTheme.typography.bodyMedium)
-                        if (command.hasScreenshot && command.screenshot == null) {
-                            OutlinedButton(
-                                onClick = {
-                                    scope.launch {
-                                        busy = true
-                                        errorMessage = null
-                                        try {
-                                            val updated = withContext(Dispatchers.IO) {
-                                                RelayApi.getCommand(settings, command.id)
-                                            }
-                                            commands = commands.map { if (it.id == command.id) updated else it }
-                                        } catch (error: IOException) {
-                                            errorMessage = error.message ?: "Could not load the screenshot."
-                                        } finally {
-                                            busy = false
-                                        }
-                                    }
-                                },
-                                enabled = !busy,
-                            ) { Text("Load screenshot") }
-                        }
-                        command.screenshot?.let { bitmap ->
-                            Image(
-                                bitmap = bitmap.asImageBitmap(),
-                                contentDescription = "Remote screenshot",
-                                modifier = Modifier.fillMaxWidth().height(220.dp),
-                                contentScale = ContentScale.Fit,
-                            )
-                        }
-                    }
-                }
+        Text(command.createdAt, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (command.details.isNotBlank()) Text(command.details, style = MaterialTheme.typography.bodyMedium)
+        if (command.hasScreenshot && command.screenshot == null) {
+            OutlinedButton(onClick = onLoadScreenshot, enabled = !busy) {
+                Icon(Icons.Outlined.PhotoCamera, contentDescription = null)
+                Text("Load screenshot", modifier = Modifier.padding(start = 8.dp))
             }
         }
-        item { Spacer(modifier = Modifier.height(12.dp)) }
+        command.screenshot?.let { bitmap ->
+            Image(
+                bitmap = bitmap.asImageBitmap(),
+                contentDescription = "Remote screenshot",
+                modifier = Modifier.fillMaxWidth().height(220.dp).clip(RoundedCornerShape(16.dp)),
+                contentScale = ContentScale.Fit,
+            )
+        }
+    }
+}
+
+@Composable
+private fun EmptyActivity(compact: Boolean = false) {
+    PanelCard {
+        Icon(
+            Icons.Outlined.History,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(24.dp),
+        )
+        Text(
+            if (compact) "Your recent requests will show up here." else "No activity yet",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+        )
+        if (!compact) {
+            Text("When you send an action to your computer, its status and result will appear here.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun QuickActionCard(
+    label: String,
+    icon: ImageVector,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    Card(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier.animateContentSize(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+            disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        ),
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp, horizontal = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Text(label, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+@Composable
+private fun PanelCard(content: @Composable ColumnScope.() -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth().animateContentSize(),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            content = content,
+        )
+    }
+}
+
+@Composable
+private fun SectionHeading(title: String, subtitle: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        if (subtitle.isNotBlank()) {
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun InfoBanner(message: String) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.primaryContainer,
+    ) {
+        Row(
+            modifier = Modifier.padding(15.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Outlined.Security, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
+        }
+    }
+}
+
+@Composable
+private fun ErrorBanner(message: String) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.error.copy(alpha = 0.12f),
+    ) {
+        Text(
+            message,
+            modifier = Modifier.padding(15.dp),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.error,
+        )
     }
 }
 
